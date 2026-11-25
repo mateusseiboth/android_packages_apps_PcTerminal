@@ -17,3 +17,5 @@ void build_hosts(const char *hostname, char *out, size_t cap);
 int is_valid_address(const char *s);
 /* -1 when an address is not a plain IPv4 or IPv6 address. */
 int build_resolv_conf(const char *const *servers, int count, char *out, size_t cap);
+/* The gids of the groups whose member list (in /etc/group text) names the user; at most max. */
+int find_member_gids(const char *group, const char *name, unsigned *gids, int max);

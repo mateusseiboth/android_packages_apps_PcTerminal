@@ -76,8 +76,17 @@ static void hosts_and_name_servers(void)
 	CHECK(!is_valid_address("10.0.0.1 x"));
 }
 
+static void finds_the_groups_a_user_is_in(void)
+{
+	unsigned gids[8];
+	int n = find_member_gids("root:x:0:\nsudo:x:27:ubuntu,mateus\nwheel:x:10:mateus\nmateus:x:1000:\nbad\n", "mateus", gids, 8);
+	CHECK(n == 2 && gids[0] == 27 && gids[1] == 10);
+	CHECK(find_member_gids("sudo:x:27:mateus\n", "mateus", gids, 0) == 0);
+}
+
 int main(void)
 {
+	RUN(finds_the_groups_a_user_is_in);
 	RUN(the_account_takes_uid_1000);
 	RUN(the_group_and_sudo_membership);
 	RUN(a_locked_password);

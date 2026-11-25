@@ -175,3 +175,16 @@ int build_resolv_conf(const char *const *servers, int count, char *out, size_t c
 	}
 	return 0;
 }
+
+int find_member_gids(const char *group, const char *name, unsigned *gids, int max)
+{
+	char gid[16];
+	int n = 0;
+	for (const char *p = group; *p && n < max;) {
+		size_t len = strcspn(p, "\n");
+		if (has_member(p, len, name) && !read_field(p, len, 2, gid, sizeof gid))
+			gids[n++] = (unsigned)strtoul(gid, NULL, 10);
+		p += len + (p[len] == '\n');
+	}
+	return n;
+}
