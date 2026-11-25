@@ -178,20 +178,20 @@ static void prepare_cgroup(const struct request *q, const char *dir)
 
 /* /data/misc/pc-wayland/<user>: owned by that user's system uid (the compositor connects as it and puts
  * wayland-0 there), mode 0711 so the container's uids reach the socket. Put right at every start. */
-static void prepare_wayland_dir(const struct request *q)
+static void prepare_wayland_dir(const struct server *s, unsigned user)
 {
 	char name[16];
 	struct stat st;
-	unsigned owner = q->user * AID_USER_OFFSET + AID_SYSTEM;
-	snprintf(name, sizeof name, "%u", q->user);
-	if (mkdir(q->s->env->wayland_root, 0711) && errno != EEXIST)
+	unsigned owner = user * AID_USER_OFFSET + AID_SYSTEM;
+	snprintf(name, sizeof name, "%u", user);
+	if (mkdir(s->env->wayland_root, 0711) && errno != EEXIST)
 		return;
-	int root = open(q->s->env->wayland_root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	int root = open(s->env->wayland_root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
 	if (root < 0)
 		return;
 	mkdirat(root, name, 0711);
 	if (!fstatat(root, name, &st, AT_SYMLINK_NOFOLLOW) && S_ISDIR(st.st_mode) &&
-	    !q->s->ops->chown_at(NULL, root, name, owner, owner))
+	    !s->ops->chown_at(NULL, root, name, owner, owner))
 		fchmodat(root, name, 0711, 0);
 	close(root);
 }
@@ -212,7 +212,7 @@ static const char *start_container(struct request *q, const struct container *c,
 	build_cgroup_path(q, c->name, cgroup_dir, sizeof cgroup_dir);
 	build_container_path(&q->st, q->user, c->name, "rootfs", rootfs, sizeof rootfs);
 	prepare_cgroup(q, cgroup_dir);
-	prepare_wayland_dir(q);
+	prepare_wayland_dir(q->s, q->user);
 	struct start_spec spec = { c->name, rootfs, cgroup_dir, c->user, c->id_base, read_storage_uid(q), plan, count, resolv };
 	if (count < 0 || q->s->ops->start_init(env, &spec, &pid)) {
 		rmdir(cgroup_dir);
@@ -796,6 +796,12 @@ static const char *dispatch(struct request *q)
 		if (!strcmp(HANDLERS[i].cmd, cmd))
 			return HANDLERS[i].handle(q);
 	return fail(q, "bad_request", "unknown command");
+}
+
+void server_on_connect(struct server *s, unsigned peer_uid)
+{
+	if (peer_uid % AID_USER_OFFSET == AID_SYSTEM)
+		prepare_wayland_dir(s, find_android_user(peer_uid));
 }
 
 void handle_request(struct server *s, unsigned peer_uid, const char *line, int fd, reply_fn reply, void *ctx)

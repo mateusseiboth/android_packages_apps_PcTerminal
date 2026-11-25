@@ -225,6 +225,7 @@ be read. `disk_bytes` is the space the container's files use. Errors: `not_found
 - Shared with the container: `/data/media/<userId>` on `/home/<user>`, `/data/misc/pc-wayland/<userId>` on
   `/run/pc-wayland`, `/dev/dri`, `/dev/snd` and `/dev/fuse` when present, the host network.
 - The compositor puts its socket at `/data/misc/pc-wayland/<userId>/wayland-0` (mode 0666, since the
-  container's uids are not Android uids). pc-containerd makes that directory at every container start and
-  puts it right when it differs: owner and group the user's system uid (`userId * 100000 + 1000`), mode
+  container's uids are not Android uids). pc-containerd makes that directory when the user's system uid
+  connects (the compositor at login, before its first request) and at every container start, and puts it
+  right when it differs (never following a link): owner and group the user's system uid (`userId * 100000 + 1000`), mode
   0711. Its parent `/data/misc/pc-wayland` is root's, 0711.

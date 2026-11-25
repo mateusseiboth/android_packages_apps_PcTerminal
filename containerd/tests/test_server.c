@@ -122,6 +122,19 @@ static void the_wayland_folder_is_put_right_at_every_start(void)
 	ask(USER10, "{\"id\":19,\"cmd\":\"stop\",\"name\":\"debian\"}");
 }
 
+/* The compositor starts at login, before any container: its connection alone makes the folder. */
+static void a_system_app_connecting_gets_its_wayland_folder(void)
+{
+	memset(fake.last_chown_name, 0, sizeof fake.last_chown_name);
+	server_on_connect(&srv, USER11);
+	CHECK(is_wayland_dir_ready(11));
+	CHECK(!chmod(fake_path("wayland/11"), 0700));
+	server_on_connect(&srv, USER11);
+	CHECK(is_wayland_dir_ready(11));
+	server_on_connect(&srv, 0); /* root serves no user: nothing for user 0 */
+	CHECK(access(fake_path("wayland/0"), F_OK) != 0);
+}
+
 static void starts_once_and_stops(void)
 {
 	CHECK_STR(ask(USER10, "{\"id\":11,\"cmd\":\"start\",\"name\":\"debian\",\"dns\":[\"192.168.0.1\"]}"),
@@ -248,6 +261,7 @@ int main(void)
 	RUN(creates_a_container_from_a_tar_fd);
 	RUN(create_refuses_bad_requests);
 	RUN(each_android_user_sees_only_their_containers);
+	RUN(a_system_app_connecting_gets_its_wayland_folder);
 	RUN(starts_once_and_stops);
 	RUN(the_wayland_folder_is_put_right_at_every_start);
 	RUN(exec_starts_the_container_and_hands_back_the_pty);

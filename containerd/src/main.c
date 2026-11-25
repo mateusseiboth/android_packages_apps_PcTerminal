@@ -161,6 +161,7 @@ static void serve_child(struct server *s, int listener, int fd, unsigned uid)
 	struct connection c = { .fd = fd, .uid = uid };
 	signal(SIGCHLD, SIG_DFL);
 	close(listener);
+	server_on_connect(s, uid);
 	serve_connection(s, &c);
 	_exit(0);
 }

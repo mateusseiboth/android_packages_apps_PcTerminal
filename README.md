@@ -105,8 +105,8 @@ owned by MediaProvider and `media_rw` on disk, as if an Android app had written 
 file system refuses, the folder is bound as is (see Limits).
 
 `/data/misc/pc-wayland/<userId>` belongs to the user's system uid (`userId * 100000 + 1000`, the uid the
-compositor connects as), mode 0711: the daemon makes it and puts owner and mode right at every container
-start. The compositor creates `wayland-0` in it with mode 0666, so the container's uids can connect.
+compositor connects as), mode 0711: the daemon makes it, and puts owner and mode right, as soon as that uid
+connects (the compositor starts at login, before any container) and at every container start. The compositor creates `wayland-0` in it with mode 0666, so the container's uids can connect.
 
 ### The app
 
