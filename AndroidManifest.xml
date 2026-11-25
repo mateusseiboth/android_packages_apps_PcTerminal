@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Terminal: Linux containers on the PC. Runs as android.uid.system: pc-containerd only answers root and
+     the system uid of each user, and acts on that user's containers. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.lineageos.pcterminal"
+    android:sharedUserId="android.uid.system">
+
+    <!-- Downloads the distributions from images.linuxcontainers.org. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The name servers of the active network go into the container. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:allowBackup="false"
+        android:theme="@style/Theme.PcTerminal">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="density|fontScale|keyboard|keyboardHidden|layoutDirection|locale|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode">
+            <layout
+                android:defaultWidth="960dp"
+                android:defaultHeight="600dp"
+                android:minWidth="420dp"
+                android:minHeight="300dp" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

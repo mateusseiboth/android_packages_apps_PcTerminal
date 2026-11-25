@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Terminal</string>
+
+    <string name="action_open">Abrir terminal</string>
+    <string name="action_open_root">Abrir como root</string>
+    <string name="action_start">Iniciar</string>
+    <string name="action_stop">Parar</string>
+    <string name="action_rename">Renomear</string>
+    <string name="action_delete">Excluir</string>
+    <string name="action_install">Instalar uma distribuição</string>
+    <string name="action_manage">Gerenciar contêineres</string>
+    <string name="action_new_tab">Nova aba</string>
+    <string name="action_close_tab">Fechar aba</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_back">Voltar</string>
+    <string name="action_retry">Tentar de novo</string>
+    <string name="action_ok">OK</string>
+
+    <string name="tab_root">%1$s (root)</string>
+    <string name="state_running">Em execução</string>
+    <string name="state_stopped">Parado</string>
+    <string name="container_summary">%1$s %2$s, %3$s</string>
+
+    <string name="picker_title">Escolha um contêiner</string>
+    <string name="manage_title">Contêineres</string>
+    <string name="manage_empty">Nenhum contêiner ainda. Instale uma distribuição para começar.</string>
+
+    <string name="stats_memory">Memória: %1$s</string>
+    <string name="stats_cpu">CPU: %1$s</string>
+    <string name="stats_processes">Processos: %1$d</string>
+    <string name="stats_disk">Disco: %1$s</string>
+
+    <string name="delete_title">Excluir %1$s?</string>
+    <string name="delete_text">O contêiner e os arquivos dele serão apagados. Os arquivos da sua pasta de armazenamento continuam.</string>
+    <string name="rename_title">Renomear %1$s</string>
+
+    <string name="install_title">Instalar uma distribuição</string>
+    <string name="install_loading">Carregando a lista de distribuições</string>
+    <string name="install_list_failed">Não foi possível carregar a lista. Verifique a conexão com a internet e tente de novo.</string>
+    <string name="install_chosen">%1$s %2$s</string>
+    <string name="install_name_label">Nome do contêiner</string>
+    <string name="install_button">Instalar</string>
+    <string name="install_downloading">Baixando: %1$s de %2$s</string>
+    <string name="install_checking">Verificando o download</string>
+    <string name="install_extracting">Instalando: %1$s arquivos</string>
+    <string name="install_failed_download">O download falhou. Verifique a conexão com a internet e tente de novo.</string>
+    <string name="install_failed_checksum">O download está corrompido. Tente de novo.</string>
+    <string name="install_failed_space">Não há espaço suficiente. Libere espaço e tente de novo.</string>
+    <string name="install_failed_archive">Não foi possível instalar esta imagem. Escolha outra versão.</string>
+
+    <string name="error_unreachable">O serviço de contêineres não está em execução. Reinicie o PC e tente de novo.</string>
+    <string name="error_start">O contêiner não iniciou. Tente de novo ou reinicie o PC.</string>
+    <string name="error_exec">O terminal não abriu. Tente de novo.</string>
+    <string name="error_running">Pare o contêiner primeiro.</string>
+    <string name="error_exists">Este nome já está em uso. Escolha outro.</string>
+    <string name="error_bad_name">Use letras minúsculas, números e hífens.</string>
+    <string name="error_generic">Algo deu errado. Tente de novo.</string>
+</resources>

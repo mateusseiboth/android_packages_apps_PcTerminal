@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Terminal</string>
+
+    <string name="action_open">Open terminal</string>
+    <string name="action_open_root">Open as root</string>
+    <string name="action_start">Start</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_install">Install a distribution</string>
+    <string name="action_manage">Manage containers</string>
+    <string name="action_new_tab">New tab</string>
+    <string name="action_close_tab">Close tab</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_back">Back</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_ok">OK</string>
+
+    <string name="tab_root">%1$s (root)</string>
+    <string name="state_running">Running</string>
+    <string name="state_stopped">Stopped</string>
+    <string name="container_summary">%1$s %2$s, %3$s</string>
+
+    <string name="picker_title">Choose a container</string>
+    <string name="manage_title">Containers</string>
+    <string name="manage_empty">No containers yet. Install a distribution to start.</string>
+
+    <string name="stats_memory">Memory: %1$s</string>
+    <string name="stats_cpu">CPU: %1$s</string>
+    <string name="stats_processes">Processes: %1$d</string>
+    <string name="stats_disk">Disk: %1$s</string>
+
+    <string name="delete_title">Delete %1$s?</string>
+    <string name="delete_text">The container and its files will be removed. Files in your storage folder stay.</string>
+    <string name="rename_title">Rename %1$s</string>
+
+    <string name="install_title">Install a distribution</string>
+    <string name="install_loading">Loading the list of distributions</string>
+    <string name="install_list_failed">Could not load the list. Check the internet connection and try again.</string>
+    <string name="install_chosen">%1$s %2$s</string>
+    <string name="install_name_label">Container name</string>
+    <string name="install_button">Install</string>
+    <string name="install_downloading">Downloading: %1$s of %2$s</string>
+    <string name="install_checking">Checking the download</string>
+    <string name="install_extracting">Installing: %1$s files</string>
+    <string name="install_failed_download">The download failed. Check the internet connection and try again.</string>
+    <string name="install_failed_checksum">The download is damaged. Try again.</string>
+    <string name="install_failed_space">There is not enough space. Free some space and try again.</string>
+    <string name="install_failed_archive">This image could not be installed. Choose another release.</string>
+
+    <string name="error_unreachable">The container service is not running. Restart the PC and try again.</string>
+    <string name="error_start">The container did not start. Try again or restart the PC.</string>
+    <string name="error_exec">The terminal did not open. Try again.</string>
+    <string name="error_running">Stop the container first.</string>
+    <string name="error_exists">This name is in use. Choose another one.</string>
+    <string name="error_bad_name">Use lowercase letters, numbers and hyphens.</string>
+    <string name="error_generic">Something went wrong. Try again.</string>
+</resources>
