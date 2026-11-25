@@ -176,15 +176,24 @@ static void prepare_cgroup(const struct request *q, const char *dir)
 	mkdir(dir, 0755);
 }
 
-/* /data/misc/pc-wayland/<user>: made root 0711 when missing, never changed when it exists. */
+/* /data/misc/pc-wayland/<user>: owned by that user's system uid (the compositor connects as it and puts
+ * wayland-0 there), mode 0711 so the container's uids reach the socket. Put right at every start. */
 static void prepare_wayland_dir(const struct request *q)
 {
-	char dir[PATH_MAX];
-	snprintf(dir, sizeof dir, "%s/%u", q->s->env->wayland_root, q->user);
+	char name[16];
+	struct stat st;
+	unsigned owner = q->user * AID_USER_OFFSET + AID_SYSTEM;
+	snprintf(name, sizeof name, "%u", q->user);
 	if (mkdir(q->s->env->wayland_root, 0711) && errno != EEXIST)
 		return;
-	if (!mkdir(dir, 0711))
-		chmod(dir, 0711);
+	int root = open(q->s->env->wayland_root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+	if (root < 0)
+		return;
+	mkdirat(root, name, 0711);
+	if (!fstatat(root, name, &st, AT_SYMLINK_NOFOLLOW) && S_ISDIR(st.st_mode) &&
+	    !q->s->ops->chown_at(NULL, root, name, owner, owner))
+		fchmodat(root, name, 0711, 0);
+	close(root);
 }
 
 static unsigned read_storage_uid(const struct request *q)

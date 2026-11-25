@@ -101,6 +101,27 @@ static void each_android_user_sees_only_their_containers(void)
 	CHECK(strstr(ask(USER11, "{\"id\":10,\"cmd\":\"start\",\"name\":\"debian\"}"), "\"error\":\"not_found\""));
 }
 
+/* /data/misc/pc-wayland/<userId>: 0711, owned by that user's system uid, where the compositor puts its socket. */
+static int is_wayland_dir_ready(unsigned user)
+{
+	char rel[32];
+	struct stat st;
+	snprintf(rel, sizeof rel, "wayland/%u", user);
+	return !stat(fake_path(rel), &st) && S_ISDIR(st.st_mode) && (st.st_mode & 07777) == 0711 &&
+	       !strcmp(fake.last_chown_name, rel + 8) && fake.last_chown_uid == user * 100000 + 1000 &&
+	       fake.last_chown_gid == user * 100000 + 1000;
+}
+
+static void the_wayland_folder_is_put_right_at_every_start(void)
+{
+	ask(USER10, "{\"id\":19,\"cmd\":\"stop\",\"name\":\"debian\"}");
+	CHECK(!chmod(fake_path("wayland/10"), 0750));
+	memset(fake.last_chown_name, 0, sizeof fake.last_chown_name);
+	CHECK(strstr(ask(USER10, "{\"id\":19,\"cmd\":\"start\",\"name\":\"debian\"}"), "\"ok\":true"));
+	CHECK(is_wayland_dir_ready(10));
+	ask(USER10, "{\"id\":19,\"cmd\":\"stop\",\"name\":\"debian\"}");
+}
+
 static void starts_once_and_stops(void)
 {
 	CHECK_STR(ask(USER10, "{\"id\":11,\"cmd\":\"start\",\"name\":\"debian\",\"dns\":[\"192.168.0.1\"]}"),
@@ -113,6 +134,7 @@ static void starts_once_and_stops(void)
 	CHECK(fake.last_storage_uid == 1010161u); /* MediaProvider of user 10 */
 	CHECK(fake.last_plan_count > 10);
 	CHECK(access(fake_path("wayland/10"), F_OK) == 0);
+	CHECK(is_wayland_dir_ready(10));
 	CHECK(ask(USER10, "{\"id\":12,\"cmd\":\"start\",\"name\":\"debian\"}") && fake.starts == 1);
 	CHECK(strstr(ask(USER10, "{\"id\":13,\"cmd\":\"list\"}"), "\"state\":\"running\""));
 	CHECK(strstr(ask(USER10, "{\"id\":14,\"cmd\":\"start\",\"name\":\"debian\",\"dns\":[\"x\"]}"), "\"ok\":true")); /* running: dns unused */
@@ -130,7 +152,7 @@ static void exec_starts_the_container_and_hands_back_the_pty(void)
 	const char *reply = ask(USER10, "{\"id\":20,\"cmd\":\"exec\",\"name\":\"debian\",\"pty\":true,\"rows\":40,\"cols\":100}");
 	CHECK_STR(reply, "{\"id\":20,\"ok\":true,\"pid\":42,\"fd\":true}\n");
 	CHECK(out.fds[out.count - 1] >= 0);
-	CHECK(fake.starts == 2);
+	CHECK(fake.starts == 3); /* started, then restarted by the Wayland test */
 	CHECK_STR(fake.last_argv0, "/bin/zsh"); /* the user's shell from the container's passwd */
 	CHECK_STR(fake.last_cwd, "/home/mateus");
 	CHECK(fake.last_uid == 1000);
@@ -227,6 +249,7 @@ int main(void)
 	RUN(create_refuses_bad_requests);
 	RUN(each_android_user_sees_only_their_containers);
 	RUN(starts_once_and_stops);
+	RUN(the_wayland_folder_is_put_right_at_every_start);
 	RUN(exec_starts_the_container_and_hands_back_the_pty);
 	RUN(resizes_the_pty_it_is_given);
 	RUN(lists_apps_and_opens_icons);

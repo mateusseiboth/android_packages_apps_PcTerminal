@@ -21,6 +21,8 @@ static struct {
 	int last_plan_count, last_use_pty;
 	int next_pid;
 	int fail_exec;
+	char last_chown_name[256];
+	unsigned last_chown_uid, last_chown_gid;
 } fake;
 
 static inline const char *fake_path(const char *rel)
@@ -92,7 +94,10 @@ static inline int fake_send_signal(int pid, int sig)
 
 static inline int fake_chown_at(void *ctx, int dirfd, const char *name, unsigned uid, unsigned gid)
 {
-	(void)ctx, (void)dirfd, (void)name, (void)uid, (void)gid;
+	(void)ctx, (void)dirfd;
+	snprintf(fake.last_chown_name, sizeof fake.last_chown_name, "%s", name);
+	fake.last_chown_uid = uid;
+	fake.last_chown_gid = gid;
 	return 0;
 }
 
