@@ -184,7 +184,7 @@ The icon file of an app, opened read-only.
 `{"id":10,"cmd":"icon","name":"debian","path":"/usr/share/pixmaps/foo.png"}` ->
 `{"id":10,"ok":true,"fd":true,"format":"svg","size":4182}` + the fd.
 
-`path` must end in `.png`, `.svg`, `.svgz` or `.xpm` and is resolved inside the container's root
+`path` must end in `.png`, `.svg` or `.xpm` and is resolved inside the container's root
 (symbolic links never leave it). At most 4 MiB. Errors: `not_found`, `no_icon`, `bad_request`.
 
 ### `stats`
