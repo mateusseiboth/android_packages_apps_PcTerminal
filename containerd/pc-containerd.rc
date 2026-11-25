@@ -1,0 +1,12 @@
+# pc-containerd: the Linux containers of PcTerminal. Runs from boot: the Wayland compositor and the
+# terminal of every user talk to it.
+on post-fs-data
+    mkdir /data/linux 0711 root root
+    mkdir /data/misc/pc-wayland 0711 root root
+
+service pc_containerd /system_ext/bin/pc-containerd
+    class main
+    user root
+    group root system
+    # Any user's system app connects (HSUM: user 10's gid is not system); pc-containerd checks the uid.
+    socket pc-containerd stream 0666 root system

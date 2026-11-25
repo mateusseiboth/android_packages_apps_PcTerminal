@@ -1,0 +1,18 @@
+// pc-containerd: the root service behind PcTerminal's Linux containers (PROTOCOL.md).
+// Host tests: `make test` in this directory.
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+cc_binary {
+    name: "pc-containerd",
+    system_ext_specific: true,
+    srcs: ["src/*.c"],
+    c_std: "gnu11",
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+    ],
+    init_rc: ["pc-containerd.rc"],
+}

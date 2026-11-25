@@ -1,0 +1,21 @@
+# pc-containerd: makes namespaces, mounts and pivots into container root file systems, enters them with
+# setns, moves processes between cgroups. The domain is permissive (the whole device is permissive for
+# now), so it needs no allow rules yet.
+type pc_containerd, domain, coredomain;
+type pc_containerd_exec, system_file_type, exec_type, file_type;
+type pc_containerd_socket, file_type, coredomain_socket, mlstrustedobject;
+type pc_linux_data_file, file_type, data_file_type, core_data_file_type;
+type pc_wayland_data_file, file_type, data_file_type, core_data_file_type, mlstrustedobject;
+init_daemon_domain(pc_containerd)
+permissive pc_containerd;
+
+# The system app (PcTerminal, the compositor) of any user talks to the socket.
+unix_socket_connect(system_app, pc_containerd, pc_containerd)
+
+# TODO enforcing. What the service does that AOSP's neverallows forbid to a coredomain or that needs new
+# rules (README, "SELinux"):
+#   mounting proc, sysfs, tmpfs, devpts, mqueue, cgroup2 and bind mounts below /data/linux (domain.te:
+#   mount on labeled file systems), pivot_root, unshare/setns of user namespaces (cap_userns), open_tree
+#   and mount_setattr on /data/media (media_rw_data_file), writing /sys/fs/cgroup, and running the
+#   containers' programs, which then run in pc_containerd: they need a domain of their own
+#   (a type_transition on exec from pc_linux_data_file) that is not a coredomain.

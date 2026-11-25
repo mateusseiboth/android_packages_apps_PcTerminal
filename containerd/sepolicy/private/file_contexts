@@ -1,0 +1,4 @@
+/(system_ext|system/system_ext)/bin/pc-containerd    u:object_r:pc_containerd_exec:s0
+/dev/socket/pc-containerd                            u:object_r:pc_containerd_socket:s0
+/data/linux(/.*)?                                    u:object_r:pc_linux_data_file:s0
+/data/misc/pc-wayland(/.*)?                          u:object_r:pc_wayland_data_file:s0
