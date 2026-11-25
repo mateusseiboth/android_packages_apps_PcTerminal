@@ -279,6 +279,14 @@ static int run_step(struct setup *u, const struct mount_step *s)
 	return failed && !s->is_optional ? -1 : 0;
 }
 
+/* pivot_root onto the current folder; a root that cannot be pivoted (an initramfs) is moved over instead. */
+static int switch_root(void)
+{
+	if (!syscall(SYS_pivot_root, ".", "."))
+		return umount2(".", MNT_DETACH) || chdir("/");
+	return mount(".", "/", NULL, MS_MOVE, NULL) || chroot(".") || chdir("/");
+}
+
 static int enter_root(struct setup *u, int status)
 {
 	if (mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL) || mount(u->spec->rootfs, u->spec->rootfs, NULL, MS_BIND | MS_REC, NULL))
@@ -289,7 +297,7 @@ static int enter_root(struct setup *u, int status)
 	for (int i = 0; i < u->spec->plan_count; i++)
 		if (run_step(u, &u->spec->plan[i]))
 			return report_error(status, u->spec->plan[i].target), -1;
-	if (fchdir(u->root_fd) || syscall(SYS_pivot_root, ".", ".") || umount2(".", MNT_DETACH) || chdir("/"))
+	if (fchdir(u->root_fd) || switch_root())
 		return report_error(status, "pivot_root"), -1;
 	return 0;
 }
