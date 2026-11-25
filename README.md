@@ -104,8 +104,9 @@ user's host id; the container's init attaches it with `move_mount`. Files the co
 owned by MediaProvider and `media_rw` on disk, as if an Android app had written them. When the kernel or the
 file system refuses, the folder is bound as is (see Limits).
 
-The compositor owns `/data/misc/pc-wayland/<userId>`; the daemon makes it (root, 0711) only when it is missing.
-The socket in it must be connectable by the container's uids (mode 0666).
+`/data/misc/pc-wayland/<userId>` belongs to the user's system uid (`userId * 100000 + 1000`, the uid the
+compositor connects as), mode 0711: the daemon makes it and puts owner and mode right at every container
+start. The compositor creates `wayland-0` in it with mode 0666, so the container's uids can connect.
 
 ### The app
 

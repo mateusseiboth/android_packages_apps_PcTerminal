@@ -16,7 +16,8 @@ the daemon (`src/server.c`) and every client follow it exactly.
   while a long request (`create`) runs opens another connection. A connection may stay open and idle.
 - **The Android user is never sent.** Every request acts on the containers of the Android user of the
   peer: `userId = peer uid / 100000`. Root (uid 0) is user 0. A `user_id` (or any other user field) in
-  the JSON is ignored.
+  the JSON is ignored. A client that serves one user (the compositor of user 10) connects as that user's
+  system uid, `userId * 100000 + 1000` (1001000 for user 10); there is no exception for root.
 
 ## File descriptors
 
@@ -224,5 +225,6 @@ be read. `disk_bytes` is the space the container's files use. Errors: `not_found
 - Shared with the container: `/data/media/<userId>` on `/home/<user>`, `/data/misc/pc-wayland/<userId>` on
   `/run/pc-wayland`, `/dev/dri`, `/dev/snd` and `/dev/fuse` when present, the host network.
 - The compositor puts its socket at `/data/misc/pc-wayland/<userId>/wayland-0` (mode 0666, since the
-  container's uids are not Android uids). pc-containerd creates that directory (root, 0711) when it is
-  missing and never changes it when it exists.
+  container's uids are not Android uids). pc-containerd makes that directory at every container start and
+  puts it right when it differs: owner and group the user's system uid (`userId * 100000 + 1000`), mode
+  0711. Its parent `/data/misc/pc-wayland` is root's, 0711.
