@@ -9,6 +9,7 @@
 enum mount_kind {
 	MOUNT_PROC,    /* a proc of the container's pid namespace */
 	MOUNT_SYSFS,   /* the host's /sys, read-only */
+	MOUNT_CGROUP2, /* cgroup2 seen from the container's cgroup namespace */
 	MOUNT_TMPFS,
 	MOUNT_DEVPTS,  /* a new devpts instance: the container's own ptys */
 	MOUNT_MQUEUE,

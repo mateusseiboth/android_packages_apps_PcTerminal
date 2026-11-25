@@ -226,13 +226,26 @@ static int wait_until_empty(const struct request *q, const char *dir, int steps)
 	return is_cgroup_empty(dir);
 }
 
+/* The init gives its processes 5 s after SIGTERM; when it ends, the kernel ends its pid namespace. */
+static void wait_for_init(const struct request *q, const char *dir)
+{
+	for (int i = 0; i < STOP_WAIT_STEPS && !is_cgroup_empty(dir) && find_init_pid(dir, q->s->env->proc) > 0; i++)
+		q->s->ops->sleep_ms(STEP_MS);
+}
+
 /* cgroup.kill (Linux 5.14) ends every process at once; the init's SIGKILL ends its pid namespace. */
 static void kill_group(const struct request *q, const char *dir, int init)
 {
 	char path[PATH_MAX + 32];
 	snprintf(path, sizeof path, "%s/cgroup.kill", dir);
-	if (save_text_file(path, "1", 0644) && init > 0)
+	if (q->s->env->is_rootless || save_text_file(path, "1", 0644))
 		q->s->ops->send_signal(init, SIGKILL);
+}
+
+static void remove_cgroup(const struct request *q, const char *dir)
+{
+	for (int i = 0; i < KILL_WAIT_STEPS && rmdir(dir) && errno == EBUSY; i++)
+		q->s->ops->sleep_ms(STEP_MS);
 }
 
 static void stop_container(struct request *q, const struct container *c)
@@ -240,13 +253,16 @@ static void stop_container(struct request *q, const struct container *c)
 	char dir[PATH_MAX];
 	build_cgroup_path(q, c->name, dir, sizeof dir);
 	int init = find_init_pid(dir, q->s->env->proc);
-	if (init > 0)
+	if (init > 0) {
 		q->s->ops->send_signal(init, SIGTERM);
-	if (!wait_until_empty(q, dir, STOP_WAIT_STEPS)) {
+		wait_for_init(q, dir);
+	}
+	init = find_init_pid(dir, q->s->env->proc);
+	if (init > 0) {
 		kill_group(q, dir, init);
 		wait_until_empty(q, dir, KILL_WAIT_STEPS);
 	}
-	rmdir(dir);
+	remove_cgroup(q, dir);
 }
 
 /* ---- handlers --------------------------------------------------------------------------- */
@@ -594,7 +610,7 @@ static const char *handle_exec(struct request *q)
 		return error;
 	build_cgroup_path(q, c.name, cgroup_dir, sizeof cgroup_dir);
 	struct exec_spec spec = { find_running_init(q, c.name), cgroup_dir, x.argv, x.env.vars, x.cwd, x.uid, x.uid,
-				  x.use_pty, x.rows, x.cols };
+				  x.use_pty, x.rows, x.cols, c.id_base, q->s->env->is_rootless };
 	if (spec.init_pid < 0)
 		return "start_failed";
 	if (q->s->ops->exec_in(q->s->env, &spec, &pty, &pid, q->message, sizeof q->message))

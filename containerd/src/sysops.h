@@ -40,6 +40,8 @@ struct exec_spec {
 	const char *cwd;
 	unsigned uid, gid;      /* inside the container */
 	int use_pty, rows, cols;
+	unsigned id_base;       /* host id of container id 0 */
+	int is_rootless;
 };
 
 struct sys_ops {
@@ -56,3 +58,5 @@ struct sys_ops {
 
 const struct sys_env *linux_sys_env(void);
 const struct sys_ops *linux_sys_ops(void);
+/* Host trials: files keep the daemon user as owner. */
+const struct sys_ops *linux_rootless_sys_ops(void);

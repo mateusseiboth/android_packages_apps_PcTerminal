@@ -38,6 +38,8 @@ static void builds_the_plan_for_one_user(void)
 	int proc = find_step("/proc"), sys = find_step("/sys");
 	CHECK(proc >= 0 && steps[proc].kind == MOUNT_PROC);
 	CHECK(sys >= 0 && steps[sys].kind == MOUNT_SYSFS);
+	int cgroup = find_step("/sys/fs/cgroup"); /* the container's own group as the root */
+	CHECK(cgroup > sys && steps[cgroup].kind == MOUNT_CGROUP2 && steps[cgroup].is_optional);
 	CHECK(find_step("/dev/shm") > dev);
 }
 

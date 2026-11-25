@@ -86,6 +86,11 @@ int build_mount_plan(const struct plan_input *in, struct mount_step *steps, int 
 	char source[256], target[128];
 	add(&p, MOUNT_PROC, "proc", "/proc");
 	add(&p, MOUNT_SYSFS, "/sys", "/sys");
+	struct mount_step *cgroup = add(&p, MOUNT_CGROUP2, "cgroup2", "/sys/fs/cgroup");
+	if (cgroup) {
+		cgroup->is_optional = 1;
+		cgroup->flags = MS_NOSUID | MS_NODEV | MS_NOEXEC;
+	}
 	add_dev(&p, in);
 	add_tmpfs(&p, "/run", "mode=755", MS_NOSUID | MS_NODEV);
 	snprintf(source, sizeof source, "%s/%u", in->wayland_root, in->user_id);
