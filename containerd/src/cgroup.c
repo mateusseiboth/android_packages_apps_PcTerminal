@@ -42,12 +42,13 @@ int find_ns_pid(const char *proc, int pid)
 	snprintf(path, sizeof path, "%s/%d/status", proc, pid);
 	if (read_text_file(path, text, sizeof text))
 		return -1;
-	const char *line = strstr(text, "\nNSpid:");
-	const char *end = line ? strchr(line + 1, '\n') : NULL;
+	const char *line = strncmp(text, "NSpid:", 6) ? strstr(text, "\nNSpid:") : text;
 	if (!line)
 		return -1;
-	const char *last = line + 7;
-	for (const char *p = line + 7; *p && p != end; p++)
+	line += *line == '\n';
+	const char *end = strchr(line, '\n');
+	const char *last = line + 6;
+	for (const char *p = line + 6; *p && p != end; p++)
 		last = *p == '\t' || *p == ' ' ? p + 1 : last;
 	return atoi(last);
 }
