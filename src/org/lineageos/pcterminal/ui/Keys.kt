@@ -69,7 +69,8 @@ class KeyHandler(private val onShortcut: (Shortcut) -> Unit) {
 
     /** True when the key was used. */
     fun onKeyDown(event: KeyEvent, session: TerminalSession): Boolean {
-        val modifiers = KeyModifiers(shift = event.isShiftPressed, alt = event.isAltPressed, ctrl = event.isCtrlPressed)
+        // Alt is the left one: the right one is AltGr, which types characters (/ and ? on Brazilian keyboards).
+        val modifiers = KeyModifiers(shift = event.isShiftPressed, alt = event.isLeftAltPressed(), ctrl = event.isCtrlPressed)
         findShortcut(event, modifiers)?.let {
             onShortcut(it)
             return true
@@ -85,7 +86,7 @@ class KeyHandler(private val onShortcut: (Shortcut) -> Unit) {
         SHORTCUTS[m.ctrl to m.shift]?.get(event.keyCode)?.takeUnless { m.alt }
 
     private fun sendCharacter(event: KeyEvent, modifiers: KeyModifiers, session: TerminalSession): Boolean {
-        val meta = event.metaState and (KeyEvent.META_CTRL_MASK or KeyEvent.META_ALT_MASK).inv()
+        val meta = event.metaState and (KeyEvent.META_CTRL_MASK or KeyEvent.META_ALT_LEFT_ON).inv()
         val unicode = event.getUnicodeChar(meta)
         if (unicode == 0) return false
         if (unicode and KeyCharacterMap.COMBINING_ACCENT != 0) {
@@ -98,3 +99,5 @@ class KeyHandler(private val onShortcut: (Shortcut) -> Unit) {
         return true
     }
 }
+
+private fun KeyEvent.isLeftAltPressed(): Boolean = metaState and KeyEvent.META_ALT_LEFT_ON != 0
