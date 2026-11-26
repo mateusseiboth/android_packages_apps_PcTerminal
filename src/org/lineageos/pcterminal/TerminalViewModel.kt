@@ -1,6 +1,7 @@
 package org.lineageos.pcterminal
 
 import android.app.Application
+import android.content.Intent
 import android.os.UserManager
 import android.system.Os
 import androidx.lifecycle.AndroidViewModel
@@ -118,6 +119,7 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             withBusy(name) {
                 val (rows, cols) = lastSize
+                startCompositor()
                 val dns = findDnsServers(getApplication())
                 val opened = DaemonConnection.withClient { client ->
                     // A stopped container starts here with the network's name servers.
@@ -131,6 +133,15 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
                 reloadContainers()
             }
         }
+    }
+
+    /**
+     * The Wayland compositor serves the container's graphical apps. It starts on its own at login only once
+     * the person opened a Linux app (apps of a new user stay stopped until then), so a shell starts it too.
+     */
+    private fun startCompositor() {
+        val intent = Intent().setClassName(COMPOSITOR_PACKAGE, COMPOSITOR_SERVICE)
+        runCatching { getApplication<Application>().startService(intent) }
     }
 
     private fun addTab(tab: TerminalTab) {
@@ -272,3 +283,6 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         const val USAGE_EVERY_MS = 2_000L
     }
 }
+
+private const val COMPOSITOR_PACKAGE = "org.lineageos.pcwayland"
+private const val COMPOSITOR_SERVICE = "org.lineageos.pcwayland.CompositorService"
