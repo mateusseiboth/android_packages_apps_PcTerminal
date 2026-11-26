@@ -134,7 +134,10 @@ Runs a command inside the container. Starts the container first when it is stopp
 
 Default environment: `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, `HOME`, `USER`,
 `LOGNAME`, `SHELL`, `LANG=C.UTF-8`, `TERM=xterm-256color` (with `pty`), `XDG_RUNTIME_DIR=/run/user/<uid>`,
-`WAYLAND_DISPLAY=/run/pc-wayland/wayland-0`, `container=pc-containerd`.
+`WAYLAND_DISPLAY=/run/pc-wayland/wayland-0`, `XDG_SESSION_TYPE=wayland`, `QT_QPA_PLATFORM=wayland;xcb`,
+`DISPLAY=:0`, `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`,
+`PULSE_SERVER=unix:/run/user/<uid>/pulse/native`, `container=pc-containerd`. `<uid>` is 1000 for the
+container's user and 0 for root.
 
 Reply: `{"id":7,"ok":true,"pid":42}` (`pid` inside the container's pid namespace), plus `"fd":true` and
 the pty master with `pty`. The process is not tied to the connection: closing the socket does not stop

@@ -65,11 +65,13 @@ static int set_var(struct env_builder *b, const char *key, const char *value)
 
 int build_exec_env(struct exec_env *e, const struct env_input *in, const char *const *keys, const char *const *values, int count)
 {
-	char runtime_dir[32];
+	char runtime_dir[32], bus[64], pulse[64];
 	struct env_builder b = { e, 0 };
 	e->count = 0;
 	e->vars[0] = NULL;
 	snprintf(runtime_dir, sizeof runtime_dir, "/run/user/%u", in->uid);
+	snprintf(bus, sizeof bus, "unix:path=%s/bus", runtime_dir);
+	snprintf(pulse, sizeof pulse, "unix:%s/pulse/native", runtime_dir);
 	const char *const DEFAULTS[][2] = {
 		{ "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" },
 		{ "HOME", in->home },
@@ -79,6 +81,13 @@ int build_exec_env(struct exec_env *e, const struct env_input *in, const char *c
 		{ "LANG", "C.UTF-8" },
 		{ "XDG_RUNTIME_DIR", runtime_dir },
 		{ "WAYLAND_DISPLAY", "/run/pc-wayland/wayland-0" },
+		/* Without it Qt 6 tries X11 first. */
+		{ "XDG_SESSION_TYPE", "wayland" },
+		{ "QT_QPA_PLATFORM", "wayland;xcb" },
+		/* The session the daemon starts inside (README, "Session"). */
+		{ "DISPLAY", ":0" },
+		{ "DBUS_SESSION_BUS_ADDRESS", bus },
+		{ "PULSE_SERVER", pulse },
 		{ "container", "pc-containerd" },
 	};
 	int failed = 0;
