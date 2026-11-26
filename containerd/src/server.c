@@ -215,7 +215,7 @@ static const char *start_container(struct request *q, const struct container *c,
 	char cgroup_dir[PATH_MAX], rootfs[PATH_MAX];
 	struct mount_step plan[MOUNT_STEPS_MAX];
 	const struct sys_env *env = q->s->env;
-	struct plan_input in = { env->dev, env->media_root, env->wayland_root, q->user, c->user };
+	struct plan_input in = { env->dev, env->media_root, env->wayland_root, q->user, c->user, env->x11_bundle };
 	int count = build_mount_plan(&in, plan, MOUNT_STEPS_MAX), pid = 0;
 	build_cgroup_path(q, c->name, cgroup_dir, sizeof cgroup_dir);
 	build_container_path(&q->st, q->user, c->name, "rootfs", rootfs, sizeof rootfs);

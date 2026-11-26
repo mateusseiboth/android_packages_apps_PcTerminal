@@ -19,7 +19,8 @@ static void builds_the_environment_with_overrides(void)
 	const char *keys[] = { "LANG", "GDK_BACKEND" }, *values[] = { "pt_BR.UTF-8", "wayland" };
 	CHECK(!build_exec_env(&e, &in, keys, values, 2));
 	CHECK(e.count == 16);
-	CHECK_STR(e.vars[0], "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
+	/* The X11 bundle last: a distro's own programs always come first. */
+	CHECK_STR(e.vars[0], "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/run/pc-x11/bin");
 	CHECK_STR(e.vars[1], "HOME=/home/mateus");
 	CHECK_STR(e.vars[5], "LANG=pt_BR.UTF-8");
 	CHECK_STR(e.vars[6], "XDG_RUNTIME_DIR=/run/user/1000");

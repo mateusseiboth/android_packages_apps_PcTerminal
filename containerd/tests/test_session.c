@@ -11,7 +11,7 @@
 #define ID_BASE 2001000000u
 #define INIT_PID 5001
 
-static char rootfs[128], cgroup_dir[128];
+static char rootfs[128], cgroup_dir[128], bundle[128];
 static char *const ENVP[] = { "HOME=/home/mateus", "XDG_RUNTIME_DIR=/run/user/1000", NULL };
 
 /* A fresh container: an empty rootfs with these programs (755) in usr/bin, its init alone in the group. */
@@ -30,6 +30,21 @@ static void make_container(const char *const *programs, int count)
 	fake_add_process(cgroup_dir, INIT_PID, "pc-init");
 	fake.execs = 0;
 }
+
+/* The X11 bundle on the host (/system_ext/pc-x11): these programs in its bin, or no bundle at all. */
+static void make_bundle(const char *const *programs, int count)
+{
+	char cmd[1024];
+	snprintf(cmd, sizeof cmd, "rm -rf %s && mkdir -p %s/bin", bundle, bundle);
+	CHECK(!system(cmd));
+	for (int i = 0; i < count; i++) {
+		snprintf(cmd, sizeof cmd, "printf '#!/bin/sh\\n' > %s/bin/%s && chmod 755 %s/bin/%s", bundle, programs[i], bundle,
+			 programs[i]);
+		CHECK(!system(cmd));
+	}
+}
+
+static const char *const BUNDLE_PROGRAMS[] = { "dbus-daemon", "xwayland-satellite", "Xwayland" };
 
 static int start(void)
 {
@@ -114,17 +129,42 @@ static void starts_only_what_is_not_running(void)
 	CHECK(start() == 0 && fake.execs == 1);
 }
 
-/* Fedora ships dbus-broker: without systemd, systemd-socket-activate hands it the bus socket. */
-static void falls_back_to_dbus_broker(void)
+/* Fedora ships neither Xwayland nor dbus-daemon: the bundle mounted at /run/pc-x11 gives both. */
+static void uses_the_bundle_for_what_the_distro_lacks(void)
+{
+	static const char *const FEDORA[] = { "dbus-broker-launch", "systemd-socket-activate", "pipewire" };
+	make_bundle(BUNDLE_PROGRAMS, COUNT(BUNDLE_PROGRAMS));
+	make_container(FEDORA, COUNT(FEDORA));
+	CHECK(start() == 3);
+	/* --config-file alone: with --session dbus-daemon also asks for the distro's session.conf and refuses both. */
+	CHECK_STR(fake.exec_log[0], "/run/pc-x11/bin/dbus-daemon --config-file=/run/pc-x11/share/dbus-1/session.conf "
+				    "--address=unix:path=/run/user/1000/bus --nofork");
+	CHECK_STR(fake.exec_log[1], "/usr/bin/pipewire");
+	CHECK_STR(fake.exec_log[2], "/run/pc-x11/bin/xwayland-satellite :0");
+	fake_add_process(cgroup_dir, 7001, "/run/pc-x11/bin/dbus-daemon");
+	fake_add_process(cgroup_dir, 7002, "/run/pc-x11/bin/xwayland-satellite");
+	fake_add_process(cgroup_dir, 7003, "/usr/bin/pipewire");
+	CHECK(start() == 0); /* seen running by their names */
+	make_bundle(NULL, 0);
+}
+
+/* A distro's own Xwayland keeps the GPU, the bundle's does not: the distro's programs come first. */
+static void prefers_the_distros_programs(void)
+{
+	make_bundle(BUNDLE_PROGRAMS, COUNT(BUNDLE_PROGRAMS));
+	make_container(EVERYTHING, COUNT(EVERYTHING));
+	CHECK(start() == 3);
+	CHECK_STR(fake.exec_log[0], "/usr/bin/dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork");
+	CHECK_STR(fake.exec_log[2], "/usr/bin/xwayland-satellite :0");
+	make_bundle(NULL, 0);
+}
+
+/* dbus-broker needs systemd's user instance, which no container runs: started anyway it leaves a socket
+ * nobody answers, worse for programs than no bus at all. */
+static void never_starts_dbus_broker(void)
 {
 	static const char *const BROKER[] = { "dbus-broker-launch", "systemd-socket-activate" };
 	make_container(BROKER, COUNT(BROKER));
-	CHECK(start() == 1);
-	CHECK_STR(fake.exec_log[0], "/usr/bin/systemd-socket-activate -E XDG_RUNTIME_DIR -l /run/user/1000/bus "
-				    "/usr/bin/dbus-broker-launch --scope user");
-	fake_add_process(cgroup_dir, 7001, "/usr/bin/systemd-socket-activate");
-	CHECK(start() == 0);
-	make_container(BROKER, 1); /* the broker alone cannot get its socket */
 	CHECK(start() == 0 && fake.execs == 0);
 }
 
@@ -180,11 +220,15 @@ int main(void)
 {
 	fake_setup();
 	snprintf(rootfs, sizeof rootfs, "%s/rootfs", fake_root);
+	snprintf(bundle, sizeof bundle, "%s/pc-x11", fake_root);
+	fake_env.x11_bundle = bundle;
 	snprintf(cgroup_dir, sizeof cgroup_dir, "%s/cgroup/pc-containers/u10-debian", fake_root);
 	RUN(starts_the_bus_the_sound_and_x11_as_the_user);
 	RUN(writes_the_android_sink_for_pipewire);
 	RUN(starts_only_what_is_not_running);
-	RUN(falls_back_to_dbus_broker);
+	RUN(uses_the_bundle_for_what_the_distro_lacks);
+	RUN(prefers_the_distros_programs);
+	RUN(never_starts_dbus_broker);
 	RUN(skips_pieces_whose_programs_are_missing);
 	RUN(starts_pipewire_without_its_helpers);
 	RUN(keeps_going_when_a_piece_fails);

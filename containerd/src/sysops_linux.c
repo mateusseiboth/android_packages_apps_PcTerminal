@@ -659,7 +659,7 @@ static void linux_sleep_ms(int ms)
 const struct sys_env *linux_sys_env(void)
 {
 	static const struct sys_env env = { "/data/linux", "/data/media", "/data/misc/pc-wayland", "/sys/fs/cgroup",
-					    "/proc", "/dev", "/data/system/packages.list", 0 };
+					    "/proc", "/dev", "/data/system/packages.list", 0, "/system_ext/pc-x11" };
 	return &env;
 }
 

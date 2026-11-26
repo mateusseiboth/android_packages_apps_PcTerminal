@@ -73,7 +73,8 @@ int build_exec_env(struct exec_env *e, const struct env_input *in, const char *c
 	snprintf(bus, sizeof bus, "unix:path=%s/bus", runtime_dir);
 	snprintf(pulse, sizeof pulse, "unix:%s/pulse/native", runtime_dir);
 	const char *const DEFAULTS[][2] = {
-		{ "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" },
+		/* The X11 bundle last: a distro's own programs always come first. */
+		{ "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/run/pc-x11/bin" },
 		{ "HOME", in->home },
 		{ "USER", in->user },
 		{ "LOGNAME", in->user },

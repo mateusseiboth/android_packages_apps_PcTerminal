@@ -18,6 +18,7 @@ struct sys_env {
 	/* Host trials as a normal user (README, "Host trials"): only container id 0 is mapped, to the
 	 * daemon's own uid, and nothing needs root. */
 	int is_rootless;
+	const char *x11_bundle;    /* /system_ext/pc-x11: X11 and dbus for distros without them */
 };
 
 struct start_spec {

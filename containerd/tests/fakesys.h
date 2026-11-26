@@ -148,7 +148,7 @@ static inline void fake_setup(void)
 	for (int i = 0; i < 7; i++)
 		snprintf(fake_paths[i], sizeof fake_paths[i], "%s/%s", fake_root, RELS[i]);
 	fake_env = (struct sys_env){ fake_paths[0], fake_paths[1], fake_paths[2], fake_paths[3],
-				     fake_paths[4], fake_paths[5], fake_paths[6], 0 };
+				     fake_paths[4], fake_paths[5], fake_paths[6], 0, NULL };
 	for (int i = 0; i < 6; i++)
 		mkdir(fake_paths[i], 0755);
 	fake_write(fake_paths[6], "com.android.providers.media.module 10161 0 /data/user/0/x platform:privapp 1023,1015\n");

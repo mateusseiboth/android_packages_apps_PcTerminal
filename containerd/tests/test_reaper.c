@@ -16,7 +16,7 @@
 
 static char rootfs[64], cgroup_dir[128];
 static struct mount_step plan[2];
-static const struct sys_env env = { "", "", "", "/sys/fs/cgroup", "/proc", "/dev", "", 0 };
+static const struct sys_env env = { "", "", "", "/sys/fs/cgroup", "/proc", "/dev", "", 0, NULL };
 
 static int read_status_field(int pid, const char *field, char *out, size_t cap)
 {

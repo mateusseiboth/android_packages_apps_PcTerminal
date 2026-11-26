@@ -135,7 +135,7 @@ that are not running (see `start`) before the command.
   is attached to the reply**. `rows`/`cols` (optional, default 24x80) set its size. When `false`, stdin,
   stdout and stderr are `/dev/null` and nothing is attached.
 
-Default environment: `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, `HOME`, `USER`,
+Default environment: `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/run/pc-x11/bin` (the X11 bundle last), `HOME`, `USER`,
 `LOGNAME`, `SHELL`, `LANG=C.UTF-8`, `TERM=xterm-256color` (with `pty`), `XDG_RUNTIME_DIR=/run/user/<uid>`,
 `WAYLAND_DISPLAY=/run/pc-wayland/wayland-0`, `XDG_SESSION_TYPE=wayland`, `QT_QPA_PLATFORM=wayland;xcb`,
 `DISPLAY=:0`, `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`,

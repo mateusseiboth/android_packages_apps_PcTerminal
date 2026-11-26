@@ -21,6 +21,8 @@
 #define PROGRAMS_TEXT_MAX (1 << 16)
 #define AUDIO_CONF_DIR "etc/pipewire/pipewire.conf.d"
 #define AUDIO_CONF AUDIO_CONF_DIR "/pc-android.conf"
+/* Where the X11 bundle is mounted in every container (mounts.c). */
+#define BUNDLE_ROOT "/run/pc-x11"
 
 /* Where a program's name is looked up in the rootfs, as the PATH of the exec environment would. */
 static const char *const PROGRAM_DIRS[] = { "usr/local/bin", "usr/bin", "bin", "usr/sbin", "sbin" };
@@ -77,18 +79,14 @@ static void build_dbus_daemon(struct command *c, program_paths paths)
 	add_arg(c, "--nofork");
 }
 
-/* dbus-broker-launch takes its socket from systemd; systemd-socket-activate does that part without systemd,
- * and passes on only the variables named with -E. */
-static void build_dbus_broker(struct command *c, program_paths paths)
+/* The bundle's dbus-daemon reads its own session.conf: the distro may have none. --config-file alone, as
+ * --session would also ask for the distro's file and dbus-daemon refuses both. */
+static void build_bundle_dbus_daemon(struct command *c, program_paths paths)
 {
 	add_arg(c, "%s", paths[0]);
-	add_arg(c, "-E");
-	add_arg(c, "XDG_RUNTIME_DIR");
-	add_arg(c, "-l");
-	add_arg(c, "/run/user/%u/bus", CONTAINER_USER_ID);
-	add_arg(c, "%s", paths[1]);
-	add_arg(c, "--scope");
-	add_arg(c, "user");
+	add_arg(c, "--config-file=%s/share/dbus-1/session.conf", BUNDLE_ROOT);
+	add_arg(c, "--address=unix:path=/run/user/%u/bus", CONTAINER_USER_ID);
+	add_arg(c, "--nofork");
 }
 
 static void build_satellite(struct command *c, program_paths paths)
@@ -170,6 +168,7 @@ static int write_audio_conf(const struct session_target *t)
 struct launcher {
 	const char *needs[NEEDS_MAX]; /* programs that must all be there; NULL ends the list */
 	void (*build)(struct command *c, program_paths paths);
+	int from_bundle;              /* the programs come from the X11 bundle, not the rootfs */
 };
 
 struct piece {
@@ -179,13 +178,18 @@ struct piece {
 	int (*prepare)(const struct session_target *t);
 };
 
+/* The distro's programs first (its Xwayland keeps the GPU), then the bundle's. No dbus-broker: it needs
+ * systemd's user instance, which no container runs, and left alone it keeps a socket nobody answers. */
 static const struct piece PIECES[] = {
 	{ "bus",
-	  { "dbus-daemon", "dbus-broker-launch", "systemd-socket-activate" },
-	  { { { "dbus-daemon" }, build_dbus_daemon }, { { "systemd-socket-activate", "dbus-broker-launch" }, build_dbus_broker } },
+	  { "dbus-daemon" },
+	  { { { "dbus-daemon" }, build_dbus_daemon, 0 }, { { "dbus-daemon" }, build_bundle_dbus_daemon, 1 } },
 	  NULL },
-	{ "sound", { "pipewire" }, { { { "pipewire" }, build_pipewire } }, write_audio_conf },
-	{ "x11", { "xwayland-satellite" }, { { { "xwayland-satellite", "Xwayland" }, build_satellite } }, NULL },
+	{ "sound", { "pipewire" }, { { { "pipewire" }, build_pipewire, 0 } }, write_audio_conf },
+	{ "x11",
+	  { "xwayland-satellite" },
+	  { { { "xwayland-satellite", "Xwayland" }, build_satellite, 0 }, { { "xwayland-satellite", "Xwayland" }, build_satellite, 1 } },
+	  NULL },
 };
 
 static int has_line(const char *text, const char *line)
@@ -205,12 +209,32 @@ static int is_running(const struct piece *p, const char *programs)
 	return 0;
 }
 
-static int find_launcher_programs(int root, const struct launcher *l, program_paths paths)
+/* A program of the bundle: checked on the host, where the daemon sees the bundle, and named by its path in
+ * the container. */
+static int find_bundle_program(const char *bundle, const char *name, char *out, size_t cap)
+{
+	char host[PATH_MAX];
+	if (!bundle)
+		return -1;
+	snprintf(host, sizeof host, "%s/bin/%s", bundle, name);
+	if (access(host, X_OK))
+		return -1;
+	snprintf(out, cap, "%s/bin/%s", BUNDLE_ROOT, name);
+	return 0;
+}
+
+static int find_launcher_program(const struct session_target *t, const struct launcher *l, const char *name, char *out,
+				 size_t cap)
+{
+	return l->from_bundle ? find_bundle_program(t->env->x11_bundle, name, out, cap) : find_program(t->root_fd, name, out, cap);
+}
+
+static int find_launcher_programs(const struct session_target *t, const struct launcher *l, program_paths paths)
 {
 	if (!l->build)
 		return -1;
 	for (int i = 0; i < NEEDS_MAX && l->needs[i]; i++)
-		if (find_program(root, l->needs[i], paths[i], sizeof paths[i]))
+		if (find_launcher_program(t, l, l->needs[i], paths[i], sizeof paths[i]))
 			return -1;
 	return 0;
 }
@@ -233,7 +257,7 @@ static int start_piece(const struct session_target *t, const struct piece *p)
 	program_paths paths;
 	for (size_t i = 0; i < sizeof p->launchers / sizeof *p->launchers; i++) {
 		struct command c = { .count = 0 };
-		if (find_launcher_programs(t->root_fd, &p->launchers[i], paths))
+		if (find_launcher_programs(t, &p->launchers[i], paths))
 			continue;
 		if (p->prepare && p->prepare(t)) {
 			fprintf(stderr, "pc-containerd: session %s: could not write its files\n", p->name);

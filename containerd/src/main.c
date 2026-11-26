@@ -210,7 +210,7 @@ static struct sys_env build_root_env(const char *root, int is_rootless)
 	static const char *const RELS[] = { "linux", "media", "wayland", "cgroup", "packages.list" };
 	for (int i = 0; i < 5; i++)
 		snprintf(paths[i], sizeof paths[i], "%s/%s", root, RELS[i]);
-	return (struct sys_env){ paths[0], paths[1], paths[2], paths[3], "/proc", "/dev", paths[4], is_rootless };
+	return (struct sys_env){ paths[0], paths[1], paths[2], paths[3], "/proc", "/dev", paths[4], is_rootless, NULL };
 }
 
 static const char *find_option(int argc, char **argv, const char *name)

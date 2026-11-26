@@ -16,7 +16,7 @@ static int find_step(const char *target)
 
 static void builds_the_plan_for_one_user(void)
 {
-	struct plan_input in = { "/dev", "/data/media", "/data/misc/pc-wayland", 10, "mateus" };
+	struct plan_input in = { "/dev", "/data/media", "/data/misc/pc-wayland", 10, "mateus", "/system_ext/pc-x11" };
 	count = build_mount_plan(&in, steps, MOUNT_STEPS_MAX);
 	CHECK(count > 10);
 	int home = find_step("/home/mateus");
@@ -24,6 +24,9 @@ static void builds_the_plan_for_one_user(void)
 	int wayland = find_step("/run/pc-wayland");
 	CHECK(wayland >= 0 && steps[wayland].kind == MOUNT_BIND && !strcmp(steps[wayland].source, "/data/misc/pc-wayland/10"));
 	CHECK(find_step("/run") >= 0 && find_step("/run") < wayland);
+	int x11 = find_step("/run/pc-x11"); /* the X11 bundle, read-only as the system partition it comes from */
+	CHECK(x11 > find_step("/run") && steps[x11].kind == MOUNT_BIND && steps[x11].is_optional &&
+	      !strcmp(steps[x11].source, "/system_ext/pc-x11"));
 	int dri = find_step("/dev/dri");
 	CHECK(dri >= 0 && steps[dri].kind == MOUNT_RBIND && steps[dri].is_optional && !strcmp(steps[dri].source, "/dev/dri"));
 	int snd = find_step("/dev/snd");
@@ -43,15 +46,23 @@ static void builds_the_plan_for_one_user(void)
 	CHECK(find_step("/dev/shm") > dev);
 }
 
+static void no_bundle_no_mount(void)
+{
+	struct plan_input in = { "/dev", "/data/media", "/data/misc/pc-wayland", 10, "mateus", NULL };
+	count = build_mount_plan(&in, steps, MOUNT_STEPS_MAX);
+	CHECK(count > 0 && find_step("/run/pc-x11") < 0);
+}
+
 static void a_small_table_is_never_overrun(void)
 {
-	struct plan_input in = { "/dev", "/data/media", "/data/misc/pc-wayland", 0, "user" };
+	struct plan_input in = { "/dev", "/data/media", "/data/misc/pc-wayland", 0, "user", NULL };
 	CHECK(build_mount_plan(&in, steps, 3) == -1);
 }
 
 int main(void)
 {
 	RUN(builds_the_plan_for_one_user);
+	RUN(no_bundle_no_mount);
 	RUN(a_small_table_is_never_overrun);
 	return CHECK_DONE();
 }

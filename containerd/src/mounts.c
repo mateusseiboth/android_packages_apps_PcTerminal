@@ -95,6 +95,10 @@ int build_mount_plan(const struct plan_input *in, struct mount_step *steps, int 
 	add_tmpfs(&p, "/run", "mode=755", MS_NOSUID | MS_NODEV);
 	snprintf(source, sizeof source, "%s/%u", in->wayland_root, in->user_id);
 	add(&p, MOUNT_BIND, source, "/run/pc-wayland");
+	/* X11 for every distro (README, "X11"): read-only, as the system partition it comes from. */
+	struct mount_step *x11 = in->x11_bundle ? add(&p, MOUNT_BIND, in->x11_bundle, "/run/pc-x11") : NULL;
+	if (x11)
+		x11->is_optional = 1;
 	snprintf(source, sizeof source, "%s/%u", in->media_root, in->user_id);
 	snprintf(target, sizeof target, "/home/%s", in->user);
 	struct mount_step *home = add(&p, MOUNT_STORAGE, source, target);

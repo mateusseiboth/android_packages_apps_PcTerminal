@@ -77,7 +77,8 @@ There is no systemd in a container, so the daemon starts the person's session it
 (`containerd/src/session.c`): at every `start` and `exec` it looks at what the container's group runs (the base
 name of each process's `argv[0]`) and starts, as the container's user with the default `exec` environment and
 the same `setns` path as `exec`, each piece that is not running and whose programs are in the rootfs
-(`/usr/local/bin`, `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin`). A missing program or a failed start is logged and
+(`/usr/local/bin`, `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin`) or, for the session bus and X11, in the X11 bundle
+(below). A distro's own programs always come first: its Xwayland keeps the GPU. A missing program or a failed start is logged and
 skipped; it never fails the request. The pieces land in the container's pid namespace, so its init adopts and
 reaps them and they end with the container. A lock on the rootfs keeps two requests from starting a piece twice.
 Host trials (`--rootless`) map only container root, so they start no session.
@@ -85,9 +86,10 @@ Host trials (`--rootless`) map only container root, so they start no session.
 | Piece | Started as | Needs (Fedora / Debian, Ubuntu / Arch) |
 | --- | --- | --- |
 | session bus | `dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork` | `dbus-daemon` / `dbus-daemon` / `dbus` |
-| session bus, else | `systemd-socket-activate -E XDG_RUNTIME_DIR -l /run/user/1000/bus dbus-broker-launch --scope user` | `systemd` and `dbus-broker` (Fedora's default bus) |
+| session bus, else | `/run/pc-x11/bin/dbus-daemon --config-file=/run/pc-x11/share/dbus-1/session.conf --address=unix:path=/run/user/1000/bus --nofork` | nothing: the X11 bundle |
 | sound | `pipewire`, which starts `wireplumber` and `pipewire-pulse` | `pipewire`, `wireplumber`, `pipewire-pulseaudio` / `pipewire`, `wireplumber`, `pipewire-pulse` / the same as Debian |
-| X11 | `xwayland-satellite :0` (only when `Xwayland` is there too) | `xwayland-satellite`, `xorg-x11-server-Xwayland` / not in Debian (build it), `xwayland` / `xwayland-satellite`, `xorg-xwayland` |
+| X11 | `xwayland-satellite :0` (when the distro has `Xwayland` too: GPU through glamor) | `xwayland-satellite`, `xorg-x11-server-Xwayland` / `xwayland` and a built satellite / `xwayland-satellite`, `xorg-xwayland` |
+| X11, else | `/run/pc-x11/bin/xwayland-satellite :0`, running the bundle's Xwayland (shared memory, no GPU) | nothing: the X11 bundle |
 
 - **Sound.** Before it starts PipeWire the daemon writes `/etc/pipewire/pipewire.conf.d/pc-android.conf` (owned
   by container root, 0644): `libpipewire-module-pipe-tunnel` as a sink named `android` (S16LE, 48 kHz,
@@ -96,9 +98,13 @@ Host trials (`--rootless`) map only container root, so they start no session.
   socket listens; nothing else would order them). The compositor makes that FIFO (0666) and plays what
   arrives through `AudioTrack`; the daemon never makes it, and the module is `nofail`, so PipeWire runs without
   it. PulseAudio programs reach `pipewire-pulse` at `/run/user/1000/pulse/native` (`PULSE_SERVER`).
-- **dbus-broker** takes its socket from systemd; without it, `systemd-socket-activate` listens on the bus path
-  and execs the broker at the first connection. D-Bus activation of services needs systemd under dbus-broker,
-  so only `dbus-daemon` activates services.
+- **The X11 bundle.** `/system_ext/pc-x11`, bind-mounted read-only at `/run/pc-x11` in every container: Xwayland
+  (built without glamor, so it needs no Mesa), xwayland-satellite, xkbcomp with the XKB data, and dbus-daemon,
+  each with its libraries and its own `ld.so` (`packages/apps/PcWayland/x11`), so they run on any distro and libc.
+  `/run/pc-x11/bin` ends the default `PATH`, which is how the bundle's satellite finds its Xwayland.
+- **No dbus-broker.** It takes its socket from systemd's user instance, which no container runs; started without
+  it, it dies and leaves a socket nobody answers ("Connection refused"), worse for programs than no bus. Fedora,
+  whose default bus it is, gets the bundle's `dbus-daemon`.
 
 ### User ids
 

@@ -35,6 +35,7 @@ struct plan_input {
 	const char *wayland_root; /* /data/misc/pc-wayland */
 	unsigned user_id;
 	const char *user;
+	const char *x11_bundle;   /* /system_ext/pc-x11, or NULL */
 };
 
 /* The number of steps, or -1 when they do not fit in max. */
