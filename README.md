@@ -72,12 +72,13 @@ daemon keeps nothing. `resize` takes the master back (also by `SCM_RIGHTS`) and 
 
 ### User ids
 
-Container uid/gid `n` (0..65535) is host id `2147500000 + userId * 100000 + n`.
+Container uid/gid `n` (0..65535) is host id `2000000000 + userId * 100000 + n`.
 
-- **Never an Android uid.** Android uids are `userId * 100000 + appId` and user ids stop at
-  `UserHandle.MAX_SECONDARY_USER_ID` = 21474, so every Android uid is below `21475 * 100000 = 2147500000`.
-  The containers start right after: no Android user, present or future, can own one of these ids. The last
-  user's range still ends below 2^32 - 1.
+- **Below 2^31, so it has network.** netd routes only uids 0..2147483647 (the `uidrange` of its ip
+  rules); a higher uid falls through to the `unreachable` rule. The first plan, ids past every possible
+  Android uid (from 2147500000), had no network at all. Android uids are `userId * 100000 + appId`, so the
+  containers' range meets them only from Android user 20000 on, which no PC reaches; container ranges fit
+  below 2^31 for users 0 to 1473 (`MAX_CONTAINER_USER`).
 - **100000 per user, aligned.** The suggested `10000000 + userId * 65536` would land on Android user 100 and
   up, and its ranges would not line up with Android's. With ranges that start on a multiple of 100000,
   `host uid % 100000` (the "app id" netd's eBPF programs look at) is the container uid itself: container root is

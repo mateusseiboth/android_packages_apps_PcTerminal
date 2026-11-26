@@ -19,15 +19,16 @@ static void the_android_user_comes_from_the_uid(void)
 	CHECK(find_android_user(1101000) == 11);
 }
 
-/* Container ids sit past every uid Android can give out (users stop at 21474), 100000 per user so a
- * container uid keeps its value as the app id netd's eBPF looks at. */
-static void container_ids_never_meet_android_uids(void)
+/* Container ids sit below 2^31: Android routes only uids 0..2147483647 (netd's ip rules), so a higher
+ * uid has no network. 100000 per user so a container uid keeps its value as the app id netd's eBPF looks
+ * at; Android users would reach the range only from user 20000 on. */
+static void container_ids_have_network_and_never_meet_android_users(void)
 {
-	CHECK(find_host_id_base(0) == 2147500000u);
-	CHECK(find_host_id_base(10) == 2148500000u);
+	CHECK(find_host_id_base(0) == 2000000000u);
+	CHECK(find_host_id_base(10) == 2001000000u);
 	CHECK(find_host_id_base(10) % 100000 == 0);
-	CHECK(find_host_id_base(10) > 21474u * 100000u + 99999u);
-	CHECK(find_host_id_base(MAX_ANDROID_USER) + CONTAINER_ID_COUNT - 1 < 4294967295u);
+	CHECK(find_host_id_base(MAX_CONTAINER_USER) + CONTAINER_ID_COUNT - 1 <= 2147483647u);
+	CHECK(find_host_id_base(0) > 19999u * 100000u + 99999u);
 	CHECK(CONTAINER_ID_COUNT == 65536);
 }
 
@@ -65,7 +66,7 @@ int main(void)
 {
 	RUN(trusts_root_and_the_system_app_of_any_user);
 	RUN(the_android_user_comes_from_the_uid);
-	RUN(container_ids_never_meet_android_uids);
+	RUN(container_ids_have_network_and_never_meet_android_users);
 	RUN(container_names);
 	RUN(user_names);
 	return CHECK_DONE();

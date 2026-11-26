@@ -143,7 +143,7 @@ static void starts_once_and_stops(void)
 	CHECK_STR(fake.last_name, "debian");
 	CHECK_STR(fake.last_user, "mateus");
 	CHECK_STR(fake.last_resolv, "nameserver 192.168.0.1\n");
-	CHECK(fake.last_id_base == 2148500000u);
+	CHECK(fake.last_id_base == 2001000000u);
 	CHECK(fake.last_storage_uid == 1010161u); /* MediaProvider of user 10 */
 	CHECK(fake.last_plan_count > 10);
 	CHECK(access(fake_path("wayland/10"), F_OK) == 0);

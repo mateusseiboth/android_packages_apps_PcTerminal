@@ -8,8 +8,12 @@
 #define AID_USER_OFFSET 100000u
 /* UserHandle.MAX_SECONDARY_USER_ID: Integer.MAX_VALUE / PER_USER_RANGE. */
 #define MAX_ANDROID_USER 21474u
-/* The first host id past MAX_ANDROID_USER's range, a multiple of AID_USER_OFFSET. */
-#define HOST_ID_START ((MAX_ANDROID_USER + 1) * AID_USER_OFFSET)
+/* The first container host id, a multiple of AID_USER_OFFSET below 2^31: netd routes only uids
+ * 0..2147483647 (its ip rules' uidrange), so higher uids have no network. Android users reach it only from
+ * user 20000 on. */
+#define HOST_ID_START 2000000000u
+/* The last Android user whose container range still ends below 2^31. */
+#define MAX_CONTAINER_USER ((2147483647u - HOST_ID_START - CONTAINER_ID_COUNT + 1u) / AID_USER_OFFSET)
 #define CONTAINER_ID_COUNT 65536u
 /* The person's account inside every container. */
 #define CONTAINER_USER_ID 1000u

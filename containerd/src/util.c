@@ -33,6 +33,8 @@ int save_text_file(const char *path, const char *text, unsigned mode)
 	int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, mode);
 	if (fd < 0)
 		return -1;
+	/* open's mode goes through the umask, and init gives services 077. */
+	fchmod(fd, mode);
 	size_t len = strlen(text);
 	int failed = write(fd, text, len) != (ssize_t)len || fsync(fd);
 	failed = close(fd) || failed;

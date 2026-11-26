@@ -221,7 +221,7 @@ be read. `disk_bytes` is the space the container's files use. Errors: `not_found
 ## Container layout (for reference)
 
 - Files: `/data/linux/<userId>/<name>/rootfs` and `/data/linux/<userId>/<name>/config.json`.
-- Ids: container uid/gid `n` (0..65535) is host uid/gid `2147500000 + userId * 100000 + n`.
+- Ids: container uid/gid `n` (0..65535) is host uid/gid `2000000000 + userId * 100000 + n` (below 2^31: netd routes only uids up to 2147483647).
 - Shared with the container: `/data/media/<userId>` on `/home/<user>`, `/data/misc/pc-wayland/<userId>` on
   `/run/pc-wayland`, `/dev/dri`, `/dev/snd` and `/dev/fuse` when present, the host network.
 - The compositor puts its socket at `/data/misc/pc-wayland/<userId>/wayland-0` (mode 0666, since the

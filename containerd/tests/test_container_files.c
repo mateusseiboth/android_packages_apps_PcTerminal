@@ -53,8 +53,32 @@ static void writes_account_hosts_and_dns(void)
 	CHECK(!system(cmd));
 }
 
+/* init starts the daemon with umask 077: the container's user must still read what it writes. */
+static void files_keep_their_modes_under_any_umask(void)
+{
+	char cmd[512];
+	snprintf(root, sizeof root, "/tmp/pccfiles-XXXXXX");
+	CHECK(mkdtemp(root) != NULL);
+	snprintf(cmd, sizeof cmd, "cd %s && mkdir -p etc && printf 'root:x:0:0::/root:/bin/sh\\n' > etc/passwd && "
+		 "printf 'root:x:0:\\n' > etc/group && printf 'root:*:1:0:::::\\n' > etc/shadow", root);
+	CHECK(!system(cmd));
+	mode_t old = umask(077);
+	struct container_files f = { root, "debian", "mateus", "nameserver 1.1.1.1\n" };
+	CHECK(!write_container_files(&f));
+	umask(old);
+	const char *readable[] = { "etc/resolv.conf", "etc/hosts", "etc/hostname", "etc/passwd", "etc/group" };
+	struct stat st;
+	for (size_t i = 0; i < sizeof readable / sizeof *readable; i++) {
+		snprintf(cmd, sizeof cmd, "%s/%s", root, readable[i]);
+		CHECK(!stat(cmd, &st) && (st.st_mode & 0777) == 0644);
+	}
+	snprintf(cmd, sizeof cmd, "rm -rf %s", root);
+	CHECK(!system(cmd));
+}
+
 int main(void)
 {
 	RUN(writes_account_hosts_and_dns);
+	RUN(files_keep_their_modes_under_any_umask);
 	return CHECK_DONE();
 }
