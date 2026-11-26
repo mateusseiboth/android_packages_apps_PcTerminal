@@ -59,4 +59,7 @@ struct sys_ops {
 const struct sys_env *linux_sys_env(void);
 const struct sys_ops *linux_sys_ops(void);
 /* Host trials: files keep the daemon user as owner. */
-const struct sys_ops *linux_rootless_sys_ops(void);
+const struct sys_ops *linux_rootless_sys_ops(void);/* A user namespace that only maps (inside -> outside), for id-mapped mounts. Its fd, or -1. */
+int make_idmap_userns(unsigned uid_inside, unsigned gid_inside, unsigned outside);
+
+

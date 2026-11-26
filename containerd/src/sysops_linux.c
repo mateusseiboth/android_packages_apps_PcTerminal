@@ -126,13 +126,16 @@ static void __attribute__((noreturn)) fail_exit(int status, const char *what, in
 /* ---- the person's storage, id-mapped ---------------------------------------------------- */
 
 /* A user namespace that only maps (inside -> outside): uid and gid apart. Its fd, or -1. */
-static int make_idmap_userns(unsigned uid_inside, unsigned gid_inside, unsigned outside)
+int make_idmap_userns(unsigned uid_inside, unsigned gid_inside, unsigned outside)
 {
 	int ready[2], hold[2];
 	if (pipe2(ready, O_CLOEXEC) || pipe2(hold, O_CLOEXEC))
 		return -1;
 	pid_t pid = fork();
 	if (pid == 0) {
+		/* Its own copy of hold's write end would keep the read below from ever seeing EOF. */
+		close(hold[1]);
+		close(ready[0]);
 		char c = unshare(CLONE_NEWUSER) ? 'E' : 'K';
 		write_all(ready[1], &c, 1);
 		read(hold[0], &c, 1);
@@ -426,8 +429,11 @@ static int linux_start_init(const struct sys_env *env, const struct start_spec *
 		return -1;
 	int storage_fd = make_storage_mount(env, spec);
 	pid_t child = fork();
-	if (child == 0)
+	if (child == 0) {
+		/* The parent's ends: kept open here, a failing parent would leave the child waiting forever. */
+		close(to_child[1]), close(from_child[0]), close(status[0]);
 		run_namespace_child(env, spec, storage_fd, to_child[0], from_child[1], status[1]);
+	}
 	close(to_child[0]), close(from_child[1]), close(status[1]);
 	if (storage_fd >= 0)
 		close(storage_fd);
