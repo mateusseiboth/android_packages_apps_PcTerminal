@@ -30,3 +30,6 @@ int find_container(const struct store *st, unsigned user, const char *name, stru
 int rename_container(const struct store *st, unsigned user, const char *name, const char *new_name);
 /* Removes the container folder; symbolic links are removed, never followed, and other mounts are not entered. */
 int remove_container(const struct store *st, unsigned user, const char *name);
+
+/* Puts the user's and the container's folders back to 0711 (crossable by the container's uids). */
+int open_container_dirs(const struct store *st, unsigned user, const char *name);

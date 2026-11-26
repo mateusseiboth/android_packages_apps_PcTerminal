@@ -80,6 +80,20 @@ void build_container_path(const struct store *st, unsigned user, const char *nam
 	snprintf(out, cap, "%s/%u/%s%s%s", st->data_root, user, name, *leaf ? "/" : "", leaf);
 }
 
+/* The container's uids cross the user's and the container's folders to reach the rootfs. chmod,
+ * not just mkdir's mode: init starts services with umask 077. */
+int open_container_dirs(const struct store *st, unsigned user, const char *name)
+{
+	char path[PATH_MAX];
+	if (!is_valid_name(name))
+		return -1;
+	snprintf(path, sizeof path, "%s/%u", st->data_root, user);
+	if (chmod(path, 0711))
+		return -1;
+	build_container_path(st, user, name, "", path, sizeof path);
+	return chmod(path, 0711);
+}
+
 int add_container_dirs(const struct store *st, unsigned user, const char *name)
 {
 	char path[PATH_MAX];
@@ -92,7 +106,9 @@ int add_container_dirs(const struct store *st, unsigned user, const char *name)
 	if (mkdir(path, 0711))
 		return -1;
 	build_container_path(st, user, name, "rootfs", path, sizeof path);
-	return mkdir(path, 0755);
+	if (mkdir(path, 0755) || chmod(path, 0755))
+		return -1;
+	return open_container_dirs(st, user, name);
 }
 
 int save_container(const struct store *st, unsigned user, const struct container *c)

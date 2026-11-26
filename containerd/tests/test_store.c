@@ -100,11 +100,47 @@ static void renames_and_removes(void)
 	CHECK(!system(cmd));
 }
 
+/* The container's uids (a user namespace) cross the user's and the container's folders to reach the
+ * rootfs: both stay 0711 whatever umask the daemon runs with (init gives services 077). */
+static void folders_stay_crossable_under_any_umask(void)
+{
+	struct store st = { data_root };
+	mode_t old = umask(077);
+	CHECK(!add_container_dirs(&st, 12, "crossed"));
+	umask(old);
+	char path[256];
+	struct stat info;
+	snprintf(path, sizeof path, "%s/12", data_root);
+	CHECK(!stat(path, &info) && (info.st_mode & 07777) == 0711);
+	snprintf(path, sizeof path, "%s/12/crossed", data_root);
+	CHECK(!stat(path, &info) && (info.st_mode & 07777) == 0711);
+	snprintf(path, sizeof path, "%s/12/crossed/rootfs", data_root);
+	CHECK(!stat(path, &info) && (info.st_mode & 07777) == 0755);
+}
+
+static void a_start_puts_the_folders_right(void)
+{
+	struct store st = { data_root };
+	char path[256];
+	struct stat info;
+	CHECK(!add_container_dirs(&st, 13, "old"));
+	snprintf(path, sizeof path, "%s/13", data_root);
+	CHECK(!chmod(path, 0700));
+	snprintf(path, sizeof path, "%s/13/old", data_root);
+	CHECK(!chmod(path, 0700));
+	CHECK(!open_container_dirs(&st, 13, "old"));
+	CHECK(!stat(path, &info) && (info.st_mode & 07777) == 0711);
+	snprintf(path, sizeof path, "%s/13", data_root);
+	CHECK(!stat(path, &info) && (info.st_mode & 07777) == 0711);
+}
+
 int main(void)
 {
 	RUN(config_round_trip);
 	RUN(a_config_without_a_valid_user_is_rejected);
 	RUN(lists_the_containers_of_one_user_sorted);
 	RUN(renames_and_removes);
+	RUN(folders_stay_crossable_under_any_umask);
+	RUN(a_start_puts_the_folders_right);
 	return CHECK_DONE();
 }

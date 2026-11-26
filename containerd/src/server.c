@@ -213,6 +213,7 @@ static const char *start_container(struct request *q, const struct container *c,
 	build_container_path(&q->st, q->user, c->name, "rootfs", rootfs, sizeof rootfs);
 	prepare_cgroup(q, cgroup_dir);
 	prepare_wayland_dir(q->s, q->user);
+	open_container_dirs(&q->st, q->user, c->name); /* containers made before the folders were 0711 */
 	struct start_spec spec = { c->name, rootfs, cgroup_dir, c->user, c->id_base, read_storage_uid(q), plan, count, resolv };
 	if (count < 0 || q->s->ops->start_init(env, &spec, &pid)) {
 		rmdir(cgroup_dir);
