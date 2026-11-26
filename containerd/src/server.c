@@ -20,6 +20,7 @@
 #include "json.h"
 #include "mounts.h"
 #include "runtime.h"
+#include "session.h"
 #include "store.h"
 #include "tar.h"
 #include "util.h"
@@ -123,6 +124,13 @@ static int find_running_init(const struct request *q, const char *name)
 	char dir[PATH_MAX];
 	build_cgroup_path(q, name, dir, sizeof dir);
 	return find_init_pid(dir, q->s->env->proc);
+}
+
+static int open_rootfs(struct request *q, const struct container *c)
+{
+	char rootfs[PATH_MAX];
+	build_container_path(&q->st, q->user, c->name, "rootfs", rootfs, sizeof rootfs);
+	return open(rootfs, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
 }
 
 static const char *find_named(struct request *q, const char *key, struct container *c)
@@ -276,6 +284,8 @@ static void stop_container(struct request *q, const struct container *c)
 }
 
 /* ---- handlers --------------------------------------------------------------------------- */
+
+static void start_user_session(struct request *q, const struct container *c);
 
 static const char *handle_version(struct request *q)
 {
@@ -440,6 +450,7 @@ static const char *handle_start(struct request *q)
 	}
 	if (error)
 		return error;
+	start_user_session(q, &c);
 	send_state(q, "running");
 	return NULL;
 }
@@ -510,6 +521,13 @@ static int read_terminal_size(const struct request *q, int *rows, int *cols)
 	return 0;
 }
 
+static void set_account(struct exec_request *x, const struct container *c, int is_root)
+{
+	x->account = is_root ? "root" : c->user;
+	x->uid = is_root ? 0 : CONTAINER_USER_ID;
+	snprintf(x->home, sizeof x->home, is_root ? "/root" : "/home/%s", c->user);
+}
+
 static const char *read_account(struct request *q, const struct container *c, struct exec_request *x)
 {
 	const char *user = json_string(q->j, "user");
@@ -518,9 +536,7 @@ static const char *read_account(struct request *q, const struct container *c, st
 	int is_root = user && !strcmp(user, "root");
 	if (user && !is_root && strcmp(user, c->user))
 		return "bad_user";
-	x->account = is_root ? "root" : c->user;
-	x->uid = is_root ? 0 : CONTAINER_USER_ID;
-	snprintf(x->home, sizeof x->home, is_root ? "/root" : "/home/%s", c->user);
+	set_account(x, c, is_root);
 	return NULL;
 }
 
@@ -596,6 +612,26 @@ static const char *read_exec(struct request *q, const struct container *c, struc
 	return error ? error : read_env(q, x);
 }
 
+/* The bus, sound and X11 of the container's user (session.h); what runs already is left alone. Host trials
+ * map only container root, so the user's programs cannot run there. */
+static void start_user_session(struct request *q, const struct container *c)
+{
+	static struct exec_request x;
+	char cgroup_dir[PATH_MAX];
+	if (q->s->env->is_rootless)
+		return;
+	set_account(&x, c, 0);
+	read_shell(q, c, &x);
+	struct env_input in = { x.account, x.uid, x.home, x.shell, 0 };
+	int root = open_rootfs(q, c);
+	build_cgroup_path(q, c->name, cgroup_dir, sizeof cgroup_dir);
+	struct session_target t = { q->s->env, q->s->ops, root, cgroup_dir, find_running_init(q, c->name), c->id_base, x.env.vars, x.home };
+	if (root >= 0 && t.init_pid > 0 && !build_exec_env(&x.env, &in, NULL, NULL, 0))
+		start_session(&t);
+	if (root >= 0)
+		close(root);
+}
+
 static void send_exec_reply(const struct request *q, int pid, int pty)
 {
 	struct jw w;
@@ -618,6 +654,7 @@ static const char *handle_exec(struct request *q)
 		error = start_container(q, &c, NULL);
 	if (error)
 		return error;
+	start_user_session(q, &c);
 	build_cgroup_path(q, c.name, cgroup_dir, sizeof cgroup_dir);
 	struct exec_spec spec = { find_running_init(q, c.name), cgroup_dir, x.argv, x.env.vars, x.cwd, x.uid, x.uid,
 				  x.use_pty, x.rows, x.cols, c.id_base, q->s->env->is_rootless };
@@ -643,13 +680,6 @@ static const char *handle_resize(struct request *q)
 }
 
 /* ---- apps, icon, stats ------------------------------------------------------------------ */
-
-static int open_rootfs(struct request *q, const struct container *c)
-{
-	char rootfs[PATH_MAX];
-	build_container_path(&q->st, q->user, c->name, "rootfs", rootfs, sizeof rootfs);
-	return open(rootfs, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-}
 
 static void write_categories(struct jw *w, const char *categories)
 {

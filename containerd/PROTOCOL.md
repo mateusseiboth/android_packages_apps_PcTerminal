@@ -89,9 +89,11 @@ On failure nothing is left behind. Errors: `bad_name`, `bad_user`, `exists`, `no
 
 `{"id":3,"cmd":"start","name":"debian","dns":["192.168.1.1","1.1.1.1"]}` -> `{"id":3,"ok":true,"state":"running"}`
 
-Starts the container's init. `dns` (optional, at most 3 IPv4 or IPv6 addresses) is written to the
+Starts the container's init, then the session of the container's user: a D-Bus session bus, PipeWire with
+`pipewire-pulse`, and `xwayland-satellite` on `:0`, each only when its programs are in the container (README,
+"Session"). A missing piece never fails the request. `dns` (optional, at most 3 IPv4 or IPv6 addresses) is written to the
 container's `/etc/resolv.conf`; without it the file is left as it is. Starting a running container
-succeeds and changes nothing. Errors: `not_found`, `start_failed`.
+succeeds and only starts the session pieces that are not running. Errors: `not_found`, `start_failed`.
 
 ### `stop`
 
@@ -114,7 +116,8 @@ Only a stopped container. Errors: `not_found`, `bad_name`, `exists`, `running`.
 
 ### `exec`
 
-Runs a command inside the container. Starts the container first when it is stopped.
+Runs a command inside the container. Starts the container first when it is stopped, and the session pieces
+that are not running (see `start`) before the command.
 
 ```json
 {"id":7,"cmd":"exec","name":"debian","argv":["gedit","/home/mateus/a.txt"],

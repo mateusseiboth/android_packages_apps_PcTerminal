@@ -1,0 +1,259 @@
+#define _GNU_SOURCE
+#include "session.h"
+
+#include <fcntl.h>
+#include <limits.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "cgroup.h"
+#include "ids.h"
+#include "inroot.h"
+
+#define NEEDS_MAX 3
+#define RUNS_AS_MAX 4
+#define ARGS_MAX 12
+#define PROGRAM_PATH_MAX 128
+#define PROGRAMS_TEXT_MAX (1 << 16)
+#define AUDIO_CONF_DIR "etc/pipewire/pipewire.conf.d"
+#define AUDIO_CONF AUDIO_CONF_DIR "/pc-android.conf"
+
+/* Where a program's name is looked up in the rootfs, as the PATH of the exec environment would. */
+static const char *const PROGRAM_DIRS[] = { "usr/local/bin", "usr/bin", "bin", "usr/sbin", "sbin" };
+
+/* An executable file of that name, as an absolute path inside the container; -1 when there is none. */
+static int find_program(int root, const char *name, char *out, size_t cap)
+{
+	char rel[PATH_MAX];
+	struct stat st;
+	for (size_t i = 0; i < sizeof PROGRAM_DIRS / sizeof *PROGRAM_DIRS; i++) {
+		snprintf(rel, sizeof rel, "%s/%s", PROGRAM_DIRS[i], name);
+		int fd = open_in_root(root, rel, O_PATH, 0);
+		int is_program = fd >= 0 && !fstat(fd, &st) && S_ISREG(st.st_mode) && (st.st_mode & 0111);
+		if (fd >= 0)
+			close(fd);
+		if (is_program) {
+			snprintf(out, cap, "/%s", rel);
+			return 0;
+		}
+	}
+	return -1;
+}
+
+/* ---- commands ----------------------------------------------------------------------------- */
+
+struct command {
+	char *argv[ARGS_MAX + 1];
+	int count;
+	char text[1024];
+	size_t used;
+};
+
+static void add_arg(struct command *c, const char *format, ...)
+{
+	va_list ap;
+	char *arg = c->text + c->used;
+	va_start(ap, format);
+	int n = vsnprintf(arg, sizeof c->text - c->used, format, ap);
+	va_end(ap);
+	if (n < 0 || c->used + (size_t)n + 1 > sizeof c->text || c->count == ARGS_MAX)
+		return;
+	c->used += (size_t)n + 1;
+	c->argv[c->count++] = arg;
+	c->argv[c->count] = NULL;
+}
+
+typedef char program_paths[NEEDS_MAX][PROGRAM_PATH_MAX];
+
+static void build_dbus_daemon(struct command *c, program_paths paths)
+{
+	add_arg(c, "%s", paths[0]);
+	add_arg(c, "--session");
+	add_arg(c, "--address=unix:path=/run/user/%u/bus", CONTAINER_USER_ID);
+	add_arg(c, "--nofork");
+}
+
+/* dbus-broker-launch takes its socket from systemd; systemd-socket-activate does that part without systemd,
+ * and passes on only the variables named with -E. */
+static void build_dbus_broker(struct command *c, program_paths paths)
+{
+	add_arg(c, "%s", paths[0]);
+	add_arg(c, "-E");
+	add_arg(c, "XDG_RUNTIME_DIR");
+	add_arg(c, "-l");
+	add_arg(c, "/run/user/%u/bus", CONTAINER_USER_ID);
+	add_arg(c, "%s", paths[1]);
+	add_arg(c, "--scope");
+	add_arg(c, "user");
+}
+
+static void build_satellite(struct command *c, program_paths paths)
+{
+	add_arg(c, "%s", paths[0]);
+	add_arg(c, ":0");
+}
+
+static void build_pipewire(struct command *c, program_paths paths) { add_arg(c, "%s", paths[0]); }
+
+/* ---- PipeWire's Android sink ---------------------------------------------------------------- */
+
+/* Started by PipeWire itself once its socket listens: no systemd orders them here. */
+static const char *const AUDIO_HELPERS[] = { "wireplumber", "pipewire-pulse" };
+
+static const char AUDIO_SINK[] =
+	"# pc-containerd writes this file before it starts PipeWire (README, \"Session\").\n"
+	"# The default sink is the compositor's pipe: it plays what is written there through Android.\n"
+	"context.modules = [\n"
+	"    {   name = libpipewire-module-pipe-tunnel\n"
+	"        args = {\n"
+	"            tunnel.mode = sink\n"
+	"            pipe.filename = \"/run/pc-wayland/audio-out\"\n"
+	"            audio.format = S16LE\n"
+	"            audio.rate = 48000\n"
+	"            audio.channels = 2\n"
+	"            audio.position = [ FL FR ]\n"
+	"            node.name = android\n"
+	"            stream.props = {\n"
+	"                node.description = \"Android\"\n"
+	"                priority.session = 3000\n"
+	"            }\n"
+	"        }\n"
+	"        flags = [ nofail ]\n"
+	"    }\n"
+	"]\n";
+
+static void build_audio_conf(int root, char *out, size_t cap)
+{
+	char path[PROGRAM_PATH_MAX];
+	size_t used = (size_t)snprintf(out, cap, "%s", AUDIO_SINK);
+	const char *open = "context.exec = [\n";
+	for (size_t i = 0; i < sizeof AUDIO_HELPERS / sizeof *AUDIO_HELPERS && used < cap; i++) {
+		if (find_program(root, AUDIO_HELPERS[i], path, sizeof path))
+			continue;
+		used += (size_t)snprintf(out + used, cap - used, "%s    { path = \"%s\" }\n", open, path);
+		open = "";
+	}
+	if (!*open && used < cap)
+		snprintf(out + used, cap - used, "]\n");
+}
+
+/* Folders made for the fragment: the container's root owns them and everyone reads them, whatever the
+ * daemon's umask. */
+static int give_dir_to_container(void *ctx, int dirfd, const char *name)
+{
+	const struct session_target *t = ctx;
+	fchmodat(dirfd, name, 0755, 0);
+	return t->ops->chown_at(NULL, dirfd, name, t->id_base, t->id_base);
+}
+
+static int write_audio_conf(const struct session_target *t)
+{
+	char text[4096];
+	build_audio_conf(t->root_fd, text, sizeof text);
+	if (make_dirs_in_root(t->root_fd, AUDIO_CONF_DIR, 0755, give_dir_to_container, (void *)t))
+		return -1;
+	int fd = open_in_root(t->root_fd, AUDIO_CONF, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
+	if (fd < 0)
+		return -1;
+	size_t len = strlen(text);
+	int failed = write(fd, text, len) != (ssize_t)len || fchmod(fd, 0644) || t->ops->chown_at(NULL, fd, "", t->id_base, t->id_base);
+	close(fd);
+	return failed ? -1 : 0;
+}
+
+/* ---- the pieces ---------------------------------------------------------------------------- */
+
+struct launcher {
+	const char *needs[NEEDS_MAX]; /* programs that must all be there; NULL ends the list */
+	void (*build)(struct command *c, program_paths paths);
+};
+
+struct piece {
+	const char *name;
+	const char *runs_as[RUNS_AS_MAX]; /* argv[0] base names that show the piece runs */
+	struct launcher launchers[2];     /* the first whose programs are all there */
+	int (*prepare)(const struct session_target *t);
+};
+
+static const struct piece PIECES[] = {
+	{ "bus",
+	  { "dbus-daemon", "dbus-broker-launch", "systemd-socket-activate" },
+	  { { { "dbus-daemon" }, build_dbus_daemon }, { { "systemd-socket-activate", "dbus-broker-launch" }, build_dbus_broker } },
+	  NULL },
+	{ "sound", { "pipewire" }, { { { "pipewire" }, build_pipewire } }, write_audio_conf },
+	{ "x11", { "xwayland-satellite" }, { { { "xwayland-satellite", "Xwayland" }, build_satellite } }, NULL },
+};
+
+static int has_line(const char *text, const char *line)
+{
+	size_t len = strlen(line);
+	for (const char *p = text; *p; p += strcspn(p, "\n") + 1)
+		if (!strncmp(p, line, len) && p[len] == '\n')
+			return 1;
+	return 0;
+}
+
+static int is_running(const struct piece *p, const char *programs)
+{
+	for (int i = 0; i < RUNS_AS_MAX && p->runs_as[i]; i++)
+		if (has_line(programs, p->runs_as[i]))
+			return 1;
+	return 0;
+}
+
+static int find_launcher_programs(int root, const struct launcher *l, program_paths paths)
+{
+	if (!l->build)
+		return -1;
+	for (int i = 0; i < NEEDS_MAX && l->needs[i]; i++)
+		if (find_program(root, l->needs[i], paths[i], sizeof paths[i]))
+			return -1;
+	return 0;
+}
+
+static int run_command(const struct session_target *t, const struct piece *p, struct command *c)
+{
+	char error[256] = "";
+	int pty = -1, pid = 0;
+	struct exec_spec spec = { t->init_pid, t->cgroup_dir, c->argv, t->envp, t->home, CONTAINER_USER_ID, CONTAINER_USER_ID,
+				  0, 0, 0, t->id_base, t->env->is_rootless };
+	if (t->ops->exec_in(t->env, &spec, &pty, &pid, error, sizeof error)) {
+		fprintf(stderr, "pc-containerd: session %s: %s\n", p->name, error);
+		return 0;
+	}
+	return 1;
+}
+
+static int start_piece(const struct session_target *t, const struct piece *p)
+{
+	program_paths paths;
+	for (size_t i = 0; i < sizeof p->launchers / sizeof *p->launchers; i++) {
+		struct command c = { .count = 0 };
+		if (find_launcher_programs(t->root_fd, &p->launchers[i], paths))
+			continue;
+		if (p->prepare && p->prepare(t)) {
+			fprintf(stderr, "pc-containerd: session %s: could not write its files\n", p->name);
+			return 0;
+		}
+		p->launchers[i].build(&c, paths);
+		return run_command(t, p, &c);
+	}
+	return 0;
+}
+
+int start_session(const struct session_target *t)
+{
+	static char programs[PROGRAMS_TEXT_MAX];
+	int started = 0;
+	/* Requests are served by one process per connection: two execs at once must not both start a piece. */
+	flock(t->root_fd, LOCK_EX);
+	if (list_group_programs(t->cgroup_dir, t->env->proc, programs, sizeof programs) >= 0)
+		for (size_t i = 0; i < sizeof PIECES / sizeof *PIECES; i++)
+			started += !is_running(&PIECES[i], programs) && start_piece(t, &PIECES[i]);
+	flock(t->root_fd, LOCK_UN);
+	return started;
+}

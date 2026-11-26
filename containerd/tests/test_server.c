@@ -193,6 +193,50 @@ static void exec_starts_the_container_and_hands_back_the_pty(void)
 	fake.fail_exec = 0;
 }
 
+static void add_program(const char *name)
+{
+	char cmd[512];
+	snprintf(cmd, sizeof cmd, "mkdir -p %s && printf '#!/bin/sh\\n' > %s/%s && chmod 755 %s/%s", fake_path("linux/10/debian/rootfs/usr/bin"),
+		 fake_path("linux/10/debian/rootfs/usr/bin"), name, fake_path("linux/10/debian/rootfs/usr/bin"), name);
+	CHECK(!system(cmd));
+}
+
+/* The bus, sound and X11 start as the user with the container, and again on exec when one is missing. */
+static void the_session_starts_with_the_container_and_on_exec(void)
+{
+	add_program("dbus-daemon");
+	add_program("pipewire");
+	fake.execs = 0;
+	CHECK(strstr(ask(USER10, "{\"id\":28,\"cmd\":\"start\",\"name\":\"debian\"}"), "\"ok\":true")); /* running, started before */
+	CHECK(fake.execs == 2);
+	CHECK_STR(fake.exec_log[0], "/usr/bin/dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork");
+	CHECK_STR(fake.exec_log[1], "/usr/bin/pipewire");
+	CHECK(fake.last_uid == 1000 && fake.last_gid == 1000);
+	CHECK_STR(fake.last_cwd, "/home/mateus");
+	CHECK(strstr(fake.last_env, "USER=mateus;") && strstr(fake.last_env, "SHELL=/bin/zsh;"));
+	CHECK(strstr(fake.last_env, "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus;") && !strstr(fake.last_env, "TERM="));
+	CHECK(access(fake_path("linux/10/debian/rootfs/etc/pipewire/pipewire.conf.d/pc-android.conf"), F_OK) == 0);
+
+	fake_add_process(fake_path("cgroup/pc-containers/u10-debian"), 7001, "/usr/bin/dbus-daemon");
+	fake_add_process(fake_path("cgroup/pc-containers/u10-debian"), 7002, "/usr/bin/pipewire");
+	CHECK(strstr(ask(USER10, "{\"id\":29,\"cmd\":\"exec\",\"name\":\"debian\",\"argv\":[\"true\"]}"), "\"ok\":true"));
+	CHECK(fake.execs == 3); /* only the command: the session runs */
+	CHECK_STR(fake.exec_log[2], "true");
+
+	ask(USER10, "{\"id\":29,\"cmd\":\"stop\",\"name\":\"debian\"}");
+	fake.execs = 0;
+	CHECK(strstr(ask(USER10, "{\"id\":29,\"cmd\":\"exec\",\"name\":\"debian\",\"argv\":[\"true\"]}"), "\"ok\":true"));
+	CHECK(fake.execs == 3); /* a new start: the session first, then the command */
+	CHECK_STR(fake.exec_log[0], "/usr/bin/dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork");
+	CHECK_STR(fake.exec_log[2], "true");
+
+	fake_env.is_rootless = 1; /* host trials map only container root: the user's session cannot run */
+	fake.execs = 0;
+	ask(USER10, "{\"id\":29,\"cmd\":\"start\",\"name\":\"debian\"}");
+	CHECK(fake.execs == 0);
+	fake_env.is_rootless = 0;
+}
+
 static void resizes_the_pty_it_is_given(void)
 {
 	CHECK_STR(ask_with_fd(USER10, "{\"id\":25,\"cmd\":\"resize\",\"rows\":50,\"cols\":132}", dup(0)), "{\"id\":25,\"ok\":true}\n");
@@ -265,6 +309,7 @@ int main(void)
 	RUN(starts_once_and_stops);
 	RUN(the_wayland_folder_is_put_right_at_every_start);
 	RUN(exec_starts_the_container_and_hands_back_the_pty);
+	RUN(the_session_starts_with_the_container_and_on_exec);
 	RUN(resizes_the_pty_it_is_given);
 	RUN(lists_apps_and_opens_icons);
 	RUN(reports_stats);

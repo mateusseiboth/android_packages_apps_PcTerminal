@@ -70,6 +70,35 @@ init when the child exits), sets its groups from the container's `/etc/group`, i
 `execve`s it with the `PATH` of its environment. The pty master goes back to the client with `SCM_RIGHTS`; the
 daemon keeps nothing. `resize` takes the master back (also by `SCM_RIGHTS`) and sets `TIOCSWINSZ`.
 
+### Session
+
+There is no systemd in a container, so the daemon starts the person's session itself
+(`containerd/src/session.c`): at every `start` and `exec` it looks at what the container's group runs (the base
+name of each process's `argv[0]`) and starts, as the container's user with the default `exec` environment and
+the same `setns` path as `exec`, each piece that is not running and whose programs are in the rootfs
+(`/usr/local/bin`, `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin`). A missing program or a failed start is logged and
+skipped; it never fails the request. The pieces land in the container's pid namespace, so its init adopts and
+reaps them and they end with the container. A lock on the rootfs keeps two requests from starting a piece twice.
+Host trials (`--rootless`) map only container root, so they start no session.
+
+| Piece | Started as | Needs (Fedora / Debian, Ubuntu / Arch) |
+| --- | --- | --- |
+| session bus | `dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork` | `dbus-daemon` / `dbus-daemon` / `dbus` |
+| session bus, else | `systemd-socket-activate -E XDG_RUNTIME_DIR -l /run/user/1000/bus dbus-broker-launch --scope user` | `systemd` and `dbus-broker` (Fedora's default bus) |
+| sound | `pipewire`, which starts `wireplumber` and `pipewire-pulse` | `pipewire`, `wireplumber`, `pipewire-pulseaudio` / `pipewire`, `wireplumber`, `pipewire-pulse` / the same as Debian |
+| X11 | `xwayland-satellite :0` (only when `Xwayland` is there too) | `xwayland-satellite`, `xorg-x11-server-Xwayland` / not in Debian (build it), `xwayland` / `xwayland-satellite`, `xorg-xwayland` |
+
+- **Sound.** Before it starts PipeWire the daemon writes `/etc/pipewire/pipewire.conf.d/pc-android.conf` (owned
+  by container root, 0644): `libpipewire-module-pipe-tunnel` as a sink named `android` (S16LE, 48 kHz,
+  `[ FL FR ]`, `priority.session = 3000`, so it is the default) writing to `/run/pc-wayland/audio-out`, and a
+  `context.exec` for `wireplumber` and `pipewire-pulse` when they are there (PipeWire starts them once its
+  socket listens; nothing else would order them). The compositor makes that FIFO (0666) and plays what
+  arrives through `AudioTrack`; the daemon never makes it, and the module is `nofail`, so PipeWire runs without
+  it. PulseAudio programs reach `pipewire-pulse` at `/run/user/1000/pulse/native` (`PULSE_SERVER`).
+- **dbus-broker** takes its socket from systemd; without it, `systemd-socket-activate` listens on the bus path
+  and execs the broker at the first connection. D-Bus activation of services needs systemd under dbus-broker,
+  so only `dbus-daemon` activates services.
+
 ### User ids
 
 Container uid/gid `n` (0..65535) is host id `2000000000 + userId * 100000 + n`.
@@ -188,7 +217,10 @@ or System V semaphores (X11's MIT-SHM, some databases) fail inside; `CONFIG_BINF
 - **Name servers** are written at start; a network change while the container runs keeps the old ones until it
   restarts.
 - **`/dev/snd`** is shared, but its nodes are `0660 system:audio`: the container's uids cannot open them, and
-  Android's audio server holds the cards. Sound needs a PulseAudio/PipeWire bridge.
+  Android's audio server holds the cards. Sound goes through PipeWire and the compositor's pipe (see Session).
+- **The session** is checked only at `start` and `exec`: a piece that stops is started again at the next one.
+  PipeWire started before the compositor made `/run/pc-wayland/audio-out` has no `android` sink until it is
+  started again (stop the container, or end `pipewire` and run something).
 - **Container uids of 10000 and up** count, for netd's eBPF, as the app id of the same number (rare: distros
   use them for little more than `nobody` 65534).
 - **xattrs and file capabilities** in images are not restored (e.g. `ping`'s `cap_net_raw`); device nodes in
@@ -214,3 +246,9 @@ This app is part of LineageOS for PCs and builds on:
   techniques used as references (mounting through `/proc/self/fd`, `pivot_root(".", ".")`); no code was taken.
 - [xterm](https://invisible-island.net/xterm/) and [VT100.net](https://vt100.net): the control sequences and the
   DEC parser model the terminal follows; the emulator is our own code.
+- [PipeWire](https://pipewire.org) and [WirePlumber](https://pipewire.pages.freedesktop.org/wireplumber/)
+  ([GitLab](https://gitlab.freedesktop.org/pipewire)), [D-Bus](https://www.freedesktop.org/wiki/Software/dbus/),
+  [dbus-broker](https://github.com/bus1/dbus-broker), [systemd](https://systemd.io)'s `systemd-socket-activate` and
+  [xwayland-satellite](https://github.com/Supreeeme/xwayland-satellite): the session the daemon starts inside a
+  container runs the distribution's own copies of them. The PipeWire fragment uses only the documented options of
+  `libpipewire-module-pipe-tunnel` and `context.exec`; no code or configuration was taken from these projects.

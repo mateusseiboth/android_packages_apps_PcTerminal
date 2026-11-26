@@ -45,6 +45,41 @@ static void finds_the_init_among_the_group_processes(void)
 	CHECK(find_ns_pid(proc, 4100) == 7);
 }
 
+/* /proc/<pid>/cmdline: the arguments, each ended by a NUL. */
+static void write_cmdline(int pid, const char *args, size_t len)
+{
+	char rel[64], path[256];
+	snprintf(rel, sizeof rel, "proc/%d/cmdline", pid);
+	write_file(rel, "");
+	snprintf(path, sizeof path, "%s/%s", root, rel);
+	FILE *f = fopen(path, "w");
+	CHECK(f && fwrite(args, 1, len, f) == len);
+	if (f)
+		fclose(f);
+}
+
+/* The base name of each process's argv[0]: how the session knows which of its pieces run. */
+static void lists_the_programs_the_group_runs(void)
+{
+	char cg[128], proc[128], names[256];
+	snprintf(cg, sizeof cg, "%s/cg", root);
+	snprintf(proc, sizeof proc, "%s/proc", root);
+	write_cmdline(4000, "pc-init", 7);
+	write_cmdline(4100, "/usr/bin/dbus-daemon\0--session\0", 31);
+	write_cmdline(4200, "pipewire\0", 9);
+	CHECK(list_group_programs(cg, proc, names, sizeof names) == 3);
+	CHECK_STR(names, "dbus-daemon\npc-init\npipewire\n");
+	write_file("cg/cgroup.procs", "4100\n4300\n"); /* 4300 already ended: no cmdline */
+	CHECK(list_group_programs(cg, proc, names, sizeof names) == 1);
+	CHECK_STR(names, "dbus-daemon\n");
+	CHECK(list_group_programs(cg, proc, names, 8) == 0); /* "dbus-daemon\n" does not fit */
+	CHECK_STR(names, "");
+	char missing[160];
+	snprintf(missing, sizeof missing, "%s/none", root);
+	CHECK(list_group_programs(missing, proc, names, sizeof names) == -1);
+	write_file("cg/cgroup.procs", "4100\n4000\n4200\n");
+}
+
 static void reads_the_numbers_that_exist(void)
 {
 	char cg[128];
@@ -84,6 +119,7 @@ int main(void)
 	RUN(names_the_group_after_user_and_container);
 	RUN(reads_cpu_usage_from_cpu_stat);
 	RUN(finds_the_init_among_the_group_processes);
+	RUN(lists_the_programs_the_group_runs);
 	RUN(reads_the_numbers_that_exist);
 	RUN(counts_disk_usage_once_per_file);
 	return CHECK_DONE();

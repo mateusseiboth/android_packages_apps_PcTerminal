@@ -23,6 +23,9 @@ static struct {
 	int fail_exec;
 	char last_chown_name[256];
 	unsigned last_chown_uid, last_chown_gid;
+	char exec_log[16][512]; /* every exec's argv, joined by spaces */
+	unsigned last_gid;
+	int last_init_pid;
 } fake;
 
 static inline const char *fake_path(const char *rel)
@@ -40,6 +43,23 @@ static inline void fake_write(const char *path, const char *text)
 	snprintf(cmd, sizeof cmd, "mkdir -p \"$(dirname '%s')\" && printf '%%s' '%s' > '%s'", path, text, path);
 	if (system(cmd))
 		fprintf(stderr, "fake_write %s failed\n", path);
+}
+
+/* A process of a container: its host pid in the group and its argv[0] in /proc. */
+static inline void fake_add_process(const char *cgroup_dir, int pid, const char *argv0)
+{
+	char path[512], text[64];
+	snprintf(path, sizeof path, "%s/cgroup.procs", cgroup_dir);
+	FILE *f = fopen(path, "a");
+	if (f)
+		fprintf(f, "%d\n", pid), fclose(f);
+	snprintf(path, sizeof path, "%s/%d/status", fake_env.proc, pid);
+	snprintf(text, sizeof text, "NSpid:\t%d\t%d\n", pid, pid - 4000);
+	fake_write(path, text);
+	snprintf(path, sizeof path, "%s/%d/cmdline", fake_env.proc, pid);
+	f = fopen(path, "w");
+	if (f)
+		fwrite(argv0, 1, strlen(argv0) + 1, f), fclose(f);
 }
 
 static inline int fake_start_init(const struct sys_env *env, const struct start_spec *spec, int *pid)
@@ -65,7 +85,10 @@ static inline int fake_start_init(const struct sys_env *env, const struct start_
 static inline int fake_exec_in(const struct sys_env *env, const struct exec_spec *spec, int *pty, int *pid, char *error, size_t cap)
 {
 	(void)env;
-	fake.execs++;
+	char *line = fake.exec_log[fake.execs++ % 16];
+	line[0] = 0;
+	for (char *const *a = spec->argv; *a; a++)
+		snprintf(line + strlen(line), 512 - strlen(line), "%s%s", a == spec->argv ? "" : " ", *a);
 	if (fake.fail_exec) {
 		snprintf(error, cap, "No such file or directory");
 		return -1;
@@ -76,6 +99,8 @@ static inline int fake_exec_in(const struct sys_env *env, const struct exec_spec
 	for (char *const *e = spec->envp; *e; e++)
 		snprintf(fake.last_env + strlen(fake.last_env), sizeof fake.last_env - strlen(fake.last_env), "%s;", *e);
 	fake.last_uid = spec->uid;
+	fake.last_gid = spec->gid;
+	fake.last_init_pid = spec->init_pid;
 	fake.last_use_pty = spec->use_pty;
 	*pty = spec->use_pty ? dup(0) : -1;
 	*pid = 42;

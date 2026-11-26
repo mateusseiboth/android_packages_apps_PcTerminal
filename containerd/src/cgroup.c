@@ -71,6 +71,38 @@ int find_init_pid(const char *cgroup_dir, const char *proc)
 	return -1;
 }
 
+/* argv[0]'s base name of a process; "" when it ended or has none (a kernel thread). */
+static void read_program(const char *proc, const char *pid, char *out, size_t cap)
+{
+	char path[PATH_MAX], cmdline[PATH_MAX];
+	snprintf(path, sizeof path, "%s/%s/cmdline", proc, pid);
+	*out = 0;
+	if (read_text_file(path, cmdline, sizeof cmdline))
+		return;
+	const char *slash = strrchr(cmdline, '/');
+	snprintf(out, cap, "%s", slash ? slash + 1 : cmdline);
+}
+
+int list_group_programs(const char *cgroup_dir, const char *proc, char *out, size_t cap)
+{
+	static char text[PROCS_MAX];
+	char name[NAME_MAX + 1];
+	size_t used = 0;
+	int count = 0;
+	if (read_procs(cgroup_dir, text, sizeof text) || !cap)
+		return -1;
+	*out = 0;
+	for (char *save = NULL, *tok = strtok_r(text, "\n", &save); tok; tok = strtok_r(NULL, "\n", &save)) {
+		read_program(proc, tok, name, sizeof name);
+		size_t len = strlen(name);
+		if (!len || used + len + 2 > cap)
+			continue;
+		used += (size_t)snprintf(out + used, cap - used, "%s\n", name);
+		count++;
+	}
+	return count;
+}
+
 static int read_number_file(const char *dir, const char *leaf, unsigned long long *out)
 {
 	char path[PATH_MAX], text[64], *end = NULL;
