@@ -104,6 +104,40 @@ class Client:
         return self.fds.pop(0)
 
 
+class InitSocketTest(unittest.TestCase):
+    # On Android init creates /dev/socket/pc-containerd and passes its fd in an environment variable
+    # whose name has every non-alphanumeric character as "_": ANDROID_SOCKET_pc_containerd.
+    def test_serves_on_the_socket_init_created(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        for d in ("linux", "media/0", "wayland", "cgroup"):
+            (root / d).mkdir(parents=True)
+        path = str(root / "init-sock")
+        bound = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        bound.bind(path)
+        env = dict(os.environ, ANDROID_SOCKET_pc_containerd=str(bound.fileno()))
+        proc = subprocess.Popen([str(EXE), "--root", str(root), "--rootless"], env=env,
+                                pass_fds=[bound.fileno()])
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+        bound.close()
+        reply = None
+        for _ in range(100):
+            if proc.poll() is not None:
+                break
+            try:
+                client = Client(path)
+            except ConnectionRefusedError:
+                time.sleep(0.02)
+                continue
+            reply, _ = client.ask({"id": 1, "cmd": "list"})
+            client.close()
+            break
+        self.assertIsNone(proc.poll(), "pc-containerd exited")
+        self.assertTrue(reply and reply.get("ok"), reply)
+
+
 class SocketTest(unittest.TestCase):
     def setUp(self):
         self.daemon = Daemon()

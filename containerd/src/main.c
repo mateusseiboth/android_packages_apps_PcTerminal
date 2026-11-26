@@ -182,10 +182,11 @@ static int serve(int listener, struct server *s)
 	}
 }
 
-/* init creates and binds /dev/socket/pc-containerd (pc-containerd.rc); listening is the service's job. */
+/* init creates and binds /dev/socket/pc-containerd (pc-containerd.rc); listening is the service's job.
+ * init publishes it with every non-alphanumeric character of the name as "_". */
 static int open_init_socket(void)
 {
-	const char *env = getenv("ANDROID_SOCKET_pc-containerd");
+	const char *env = getenv("ANDROID_SOCKET_pc_containerd");
 	int fd = env ? atoi(env) : -1;
 	return fd >= 0 && !listen(fd, 8) ? fd : -1;
 }
