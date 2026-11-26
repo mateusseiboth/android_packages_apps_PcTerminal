@@ -82,11 +82,15 @@ static void write_sudo_rule(const struct container_files *f)
 	write_text(f, "etc/sudoers.d/pc-containerd", rule, 0440);
 }
 
+/* /run/user is crossable by everyone; each /run/user/<uid> is its user's alone. */
 static void make_runtime_dir(const struct container_files *f, unsigned uid)
 {
-	char path[PATH_MAX];
-	snprintf(path, sizeof path, "%s/run/user/%u", f->root, uid);
-	make_dirs(path, 0700);
+	char parent[PATH_MAX], path[PATH_MAX + 16];
+	snprintf(parent, sizeof parent, "%s/run/user", f->root);
+	make_dirs(parent, 0755);
+	chmod(parent, 0755);
+	snprintf(path, sizeof path, "%s/%u", parent, uid);
+	mkdir(path, 0700);
 	chmod(path, 0700);
 	if (chown(path, uid, uid))
 		return; /* host trials map only uid 0 */

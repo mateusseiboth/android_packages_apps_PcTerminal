@@ -55,7 +55,7 @@ maps, then the child forks the container's pid 1, which:
    root (`openat2(RESOLVE_IN_ROOT)`) and mounted through `/proc/self/fd`,
 3. `pivot_root`s into it, sets the host name to the container's name,
 4. writes the person's account, sudo rule, `/etc/hosts`, `/etc/hostname`, `/etc/resolv.conf` (from the
-   network's name servers the app sends) and `/run/user/<uid>`,
+   network's name servers the app sends), `/run/user` (0755) and `/run/user/<uid>` (0700, owned by its user),
 5. becomes a small init: it reaps orphans and, on SIGTERM, sends SIGTERM to everything, waits 5 s and exits
    (the kernel then ends the pid namespace).
 

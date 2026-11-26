@@ -76,9 +76,37 @@ static void files_keep_their_modes_under_any_umask(void)
 	CHECK(!system(cmd));
 }
 
+static int has_mode(const char *rel, unsigned mode)
+{
+	char path[256];
+	struct stat st;
+	snprintf(path, sizeof path, "%s/%s", root, rel);
+	return !lstat(path, &st) && S_ISDIR(st.st_mode) && (st.st_mode & 07777) == mode;
+}
+
+/* /run/user is crossable, so uid 1000 reaches /run/user/1000 (PulseAudio, PipeWire, the bus live there). */
+static void each_user_reaches_their_runtime_folder(void)
+{
+	char cmd[512];
+	snprintf(root, sizeof root, "/tmp/pccfiles-XXXXXX");
+	CHECK(mkdtemp(root) != NULL);
+	snprintf(cmd, sizeof cmd, "cd %s && mkdir -p etc run && printf 'root:x:0:0::/root:/bin/sh\\n' > etc/passwd", root);
+	CHECK(!system(cmd));
+	mode_t old = umask(077);
+	struct container_files f = { root, "debian", "mateus", NULL };
+	CHECK(!write_container_files(&f));
+	umask(old);
+	CHECK(has_mode("run/user", 0755));
+	CHECK(has_mode("run/user/0", 0700));
+	CHECK(has_mode("run/user/1000", 0700));
+	snprintf(cmd, sizeof cmd, "rm -rf %s", root);
+	CHECK(!system(cmd));
+}
+
 int main(void)
 {
 	RUN(writes_account_hosts_and_dns);
 	RUN(files_keep_their_modes_under_any_umask);
+	RUN(each_user_reaches_their_runtime_folder);
 	return CHECK_DONE();
 }
