@@ -1,7 +1,7 @@
 /*
  * Files the container's init writes inside the container at every start, after pivot_root (root is "")
  * or below a folder in the host tests: the person's account and sudo rule, /etc/hosts, /etc/hostname,
- * /etc/resolv.conf and /run/user/<uid>.
+ * /etc/resolv.conf, /run/user/<uid>, and /tmp/.X11-unix without the last run's display :0.
  */
 #pragma once
 

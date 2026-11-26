@@ -103,10 +103,36 @@ static void each_user_reaches_their_runtime_folder(void)
 	CHECK(!system(cmd));
 }
 
+/* xwayland-satellite puts display :0's socket in /tmp/.X11-unix; a lock left by the last run (the rootfs
+ * keeps /tmp) would make it take :0 as busy. */
+static void prepares_display_0_for_x11(void)
+{
+	char cmd[512];
+	snprintf(root, sizeof root, "/tmp/pccfiles-XXXXXX");
+	CHECK(mkdtemp(root) != NULL);
+	snprintf(cmd, sizeof cmd, "cd %s && mkdir -p etc tmp/.X11-unix && chmod 700 tmp/.X11-unix && touch tmp/.X0-lock tmp/.X11-unix/X0 "
+		 "tmp/.X1-lock tmp/.X11-unix/X1", root);
+	CHECK(!system(cmd));
+	mode_t old = umask(077);
+	struct container_files f = { root, "debian", "mateus", NULL };
+	write_container_files(&f);
+	umask(old);
+	CHECK(has_mode("tmp/.X11-unix", 01777));
+	snprintf(cmd, sizeof cmd, "cd %s && test ! -e tmp/.X0-lock && test ! -e tmp/.X11-unix/X0 && test -e tmp/.X1-lock && test -e tmp/.X11-unix/X1", root);
+	CHECK(!system(cmd)); /* only display 0 is the session's */
+	snprintf(cmd, sizeof cmd, "rm -rf %s/tmp", root);
+	CHECK(!system(cmd));
+	write_container_files(&f);
+	CHECK(has_mode("tmp/.X11-unix", 01777)); /* made when missing */
+	snprintf(cmd, sizeof cmd, "rm -rf %s", root);
+	CHECK(!system(cmd));
+}
+
 int main(void)
 {
 	RUN(writes_account_hosts_and_dns);
 	RUN(files_keep_their_modes_under_any_umask);
 	RUN(each_user_reaches_their_runtime_folder);
+	RUN(prepares_display_0_for_x11);
 	return CHECK_DONE();
 }

@@ -56,6 +56,7 @@ maps, then the child forks the container's pid 1, which:
 3. `pivot_root`s into it, sets the host name to the container's name,
 4. writes the person's account, sudo rule, `/etc/hosts`, `/etc/hostname`, `/etc/resolv.conf` (from the
    network's name servers the app sends), `/run/user` (0755) and `/run/user/<uid>` (0700, owned by its user),
+   `/tmp/.X11-unix` (1777, without the last run's `/tmp/.X0-lock` and `X0` socket),
 5. becomes a small init: it reaps orphans and, on SIGTERM, sends SIGTERM to everything, waits 5 s and exits
    (the kernel then ends the pid namespace).
 

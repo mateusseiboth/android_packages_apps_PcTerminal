@@ -96,6 +96,25 @@ static void make_runtime_dir(const struct container_files *f, unsigned uid)
 		return; /* host trials map only uid 0 */
 }
 
+/* Everyone's, sticky: X11 programs and the session's xwayland-satellite put their sockets there. */
+static const char *const SHARED_DIRS[] = { "tmp", "tmp/.X11-unix" };
+/* Left by the last run of display :0 (the rootfs keeps /tmp); nothing runs yet at start. */
+static const char *const STALE_DISPLAY_FILES[] = { "tmp/.X0-lock", "tmp/.X11-unix/X0" };
+
+static void prepare_display(const struct container_files *f)
+{
+	char path[PATH_MAX];
+	for (size_t i = 0; i < sizeof SHARED_DIRS / sizeof *SHARED_DIRS; i++) {
+		build_path(f, SHARED_DIRS[i], path, sizeof path);
+		mkdir(path, 01777);
+		chmod(path, 01777);
+	}
+	for (size_t i = 0; i < sizeof STALE_DISPLAY_FILES / sizeof *STALE_DISPLAY_FILES; i++) {
+		build_path(f, STALE_DISPLAY_FILES[i], path, sizeof path);
+		unlink(path);
+	}
+}
+
 int write_container_files(const struct container_files *f)
 {
 	char text[512];
@@ -109,5 +128,6 @@ int write_container_files(const struct container_files *f)
 		write_text(f, "etc/resolv.conf", f->resolv, 0644);
 	make_runtime_dir(f, 0);
 	make_runtime_dir(f, CONTAINER_USER_ID);
+	prepare_display(f);
 	return failed;
 }
