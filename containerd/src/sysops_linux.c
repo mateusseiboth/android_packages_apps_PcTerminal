@@ -328,6 +328,10 @@ static void reap(void)
 static void end_all(void)
 {
 	time_t until = time(NULL) + STOP_GRACE_SECONDS;
+	/* kill(-1) reaches only the container's processes from the init of its pid namespace; anywhere
+	 * else it reaches the whole machine. */
+	if (getpid() != 1)
+		_exit(1);
 	kill(-1, SIGTERM);
 	while (time(NULL) < until) {
 		struct timespec step = { 0, 100 * 1000 * 1000 };
@@ -618,7 +622,14 @@ static int linux_exec_in(const struct sys_env *env, const struct exec_spec *spec
 
 /* ---- the rest ------------------------------------------------------------------------- */
 
-static int linux_send_signal(int pid, int sig) { return kill(pid, sig); }
+/* Only one real process: as root, kill(-1) signals every process on the machine, kill(0) the caller's
+ * group and kill(1) the host's init. */
+static int linux_send_signal(int pid, int sig)
+{
+	if (pid <= 1)
+		return errno = EINVAL, -1;
+	return kill(pid, sig);
+}
 
 static int linux_chown_at(void *ctx, int dirfd, const char *name, unsigned uid, unsigned gid)
 {
