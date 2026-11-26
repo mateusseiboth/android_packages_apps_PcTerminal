@@ -376,12 +376,27 @@ static void run_container(const struct sys_env *env, const struct start_spec *sp
 	run_init();
 }
 
+int allow_setuid(const char *rootfs)
+{
+	return mount(rootfs, rootfs, NULL, MS_BIND, NULL) || mount(NULL, rootfs, NULL, MS_BIND | MS_REMOUNT | MS_NODEV, NULL);
+}
+
+/* The setuid rootfs in a mount namespace of the daemon's root; host trials (--rootless) cannot. */
+static int prepare_rootfs(const struct sys_env *env, const char *rootfs)
+{
+	if (env->is_rootless)
+		return 0;
+	return unshare(CLONE_NEWNS) || mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL) || allow_setuid(rootfs);
+}
+
 /* The first child: joins the cgroup's namespaces after the parent moved it, then forks pid 1. */
 static void run_namespace_child(const struct sys_env *env, const struct start_spec *spec, int storage_fd, int to_child,
 				int from_child, int status)
 {
 	char c;
 	int flags = CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWCGROUP;
+	if (prepare_rootfs(env, spec->rootfs))
+		fail_exit(status, "setuid rootfs", 1);
 	if (read_all(to_child, &c, 1) || unshare(flags))
 		fail_exit(status, "unshare", 1);
 	c = 'U';

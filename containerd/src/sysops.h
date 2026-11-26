@@ -62,4 +62,8 @@ const struct sys_ops *linux_sys_ops(void);
 const struct sys_ops *linux_rootless_sys_ops(void);/* A user namespace that only maps (inside -> outside), for id-mapped mounts. Its fd, or -1. */
 int make_idmap_userns(unsigned uid_inside, unsigned gid_inside, unsigned outside);
 
+/* Binds rootfs over itself with setuid allowed (sudo, su), as /data is nosuid. Run in a mount namespace
+ * of its own as real root, before the user namespace, which then locks the mount that way. */
+int allow_setuid(const char *rootfs);
+
 
