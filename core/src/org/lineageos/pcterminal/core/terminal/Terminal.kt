@@ -49,6 +49,9 @@ class Terminal(
     private var alternate = Screen(rows, cols)
     private var screen = main
     private val scrollback = ArrayDeque<TerminalLine>()
+
+    /** The number of the scrollback's oldest line: it grows as lines leave the scrollback, never shrinks. */
+    private var firstScrollbackNumber = 0L
     private val saved = HashMap<Screen, SavedCursor>()
 
     private var row = 0
@@ -81,6 +84,17 @@ class Terminal(
     /** Lines that can be read with [readLine]: the scrollback and then the screen. */
     val lineCount: Int get() = visibleScrollback + rows
 
+    /** Lines of the scrollback the main screen can scroll back to (none on the alternate screen). */
+    val scrollbackSize: Int get() = visibleScrollback
+
+    val isAlternateScreen: Boolean get() = screen === alternate
+
+    /**
+     * The number of [readLine] 0. A line keeps its number while output scrolls it into the scrollback,
+     * so a selection stays on its text. The alternate screen has no scrollback: its lines are 0 to rows - 1.
+     */
+    val firstLineNumber: Long get() = if (screen === main) firstScrollbackNumber else 0L
+
     private val visibleScrollback: Int get() = if (screen === main) scrollback.size else 0
     private val line: TerminalLine get() = screen.lines[row]
 
@@ -99,6 +113,14 @@ class Terminal(
         return LineSnapshots.build(source, cols)
     }
 
+    /** The line numbered [number] (see [firstLineNumber]), or null when it is gone or not there yet. */
+    fun readNumberedLine(number: Long): LineSnapshot? =
+        (number - firstLineNumber).takeIf { it in 0 until lineCount }?.let { readLine(it.toInt()) }
+
+    /** The number of the line drawn on screen [row] when the view is [scrollOffset] lines up. */
+    fun findLineNumber(row: Int, scrollOffset: Int): Long =
+        firstLineNumber + visibleScrollback - scrollOffset.coerceIn(0, visibleScrollback) + row.coerceIn(0, rows - 1)
+
     /** What to draw, [scrollOffset] lines up from the bottom (clamped to the scrollback). */
     fun snapshot(scrollOffset: Int = 0): TerminalSnapshot {
         val offset = scrollOffset.coerceIn(0, visibleScrollback)
@@ -115,6 +137,7 @@ class Terminal(
             isAlternateScreen = screen === alternate,
             scrollbackSize = visibleScrollback,
             scrollOffset = offset,
+            topLineNumber = firstLineNumber + first,
         )
     }
 
@@ -384,7 +407,7 @@ class Terminal(
             0 -> eraseLines(row + 1, rows).also { line.erase(col, cols, style.bg) }
             1 -> eraseLines(0, row).also { line.erase(0, col + 1, style.bg) }
             2 -> eraseLines(0, rows)
-            3 -> scrollback.clear()
+            3 -> clearScrollback()
         }
     }
 
@@ -438,9 +461,18 @@ class Terminal(
     private fun scrollRegionDown(count: Int) = screen.scrollDown(top, bottom, count, style.bg)
 
     private fun pushScrollback(evicted: TerminalLine) {
-        if (scrollbackLimit <= 0) return
         scrollback.addLast(evicted)
-        while (scrollback.size > scrollbackLimit) scrollback.removeFirst()
+        while (scrollback.size > scrollbackLimit.coerceAtLeast(0)) dropOldestLine()
+    }
+
+    private fun dropOldestLine() {
+        scrollback.removeFirst()
+        firstScrollbackNumber++
+    }
+
+    private fun clearScrollback() {
+        firstScrollbackNumber += scrollback.size
+        scrollback.clear()
     }
 
     private fun setScrollRegion(params: CsiParams) {

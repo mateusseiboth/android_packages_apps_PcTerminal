@@ -14,7 +14,8 @@ data class LineSnapshot(val runs: List<StyledRun>, val isWrapped: Boolean) {
 /**
  * An immutable copy of what the screen shows, for drawing. [lines] has [rows] entries; with a
  * [scrollOffset] the first lines come from the scrollback. The cursor is drawn at
- * ([cursorRow], [cursorCol]) when [isCursorVisible].
+ * ([cursorRow], [cursorCol]) when [isCursorVisible]. [topLineNumber] is the number of the first line
+ * (see [Terminal.firstLineNumber]).
  */
 data class TerminalSnapshot(
     val rows: Int,
@@ -27,6 +28,7 @@ data class TerminalSnapshot(
     val isAlternateScreen: Boolean,
     val scrollbackSize: Int,
     val scrollOffset: Int,
+    val topLineNumber: Long,
 )
 
 internal object LineSnapshots {
