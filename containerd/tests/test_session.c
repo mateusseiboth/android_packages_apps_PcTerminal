@@ -149,13 +149,14 @@ static void uses_the_bundle_for_what_the_distro_lacks(void)
 }
 
 /* A distro's own Xwayland keeps the GPU, the bundle's does not: the distro's programs come first. */
-static void prefers_the_distros_programs(void)
+/* The distro's bus, but the bundle's X11: its Xwayland has glamor, DRI3 and GLX on every distro. */
+static void prefers_the_distros_bus_and_the_bundles_x11(void)
 {
 	make_bundle(BUNDLE_PROGRAMS, COUNT(BUNDLE_PROGRAMS));
 	make_container(EVERYTHING, COUNT(EVERYTHING));
 	CHECK(start() == 3);
 	CHECK_STR(fake.exec_log[0], "/usr/bin/dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork");
-	CHECK_STR(fake.exec_log[2], "/usr/bin/xwayland-satellite :0");
+	CHECK_STR(fake.exec_log[2], "/run/pc-x11/bin/xwayland-satellite :0");
 	make_bundle(NULL, 0);
 }
 
@@ -227,7 +228,7 @@ int main(void)
 	RUN(writes_the_android_sink_for_pipewire);
 	RUN(starts_only_what_is_not_running);
 	RUN(uses_the_bundle_for_what_the_distro_lacks);
-	RUN(prefers_the_distros_programs);
+	RUN(prefers_the_distros_bus_and_the_bundles_x11);
 	RUN(never_starts_dbus_broker);
 	RUN(skips_pieces_whose_programs_are_missing);
 	RUN(starts_pipewire_without_its_helpers);

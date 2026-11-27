@@ -87,7 +87,7 @@ There is no systemd in a container, so the daemon starts the person's session it
 name of each process's `argv[0]`) and starts, as the container's user with the default `exec` environment and
 the same `setns` path as `exec`, each piece that is not running and whose programs are in the rootfs
 (`/usr/local/bin`, `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin`) or, for the session bus and X11, in the X11 bundle
-(below). A distro's own programs always come first: its Xwayland keeps the GPU. A missing program or a failed start is logged and
+(below). A distro's own programs come first, except X11: the bundle's Xwayland comes first on every distro. A missing program or a failed start is logged and
 skipped; it never fails the request. The pieces land in the container's pid namespace, so its init adopts and
 reaps them and they end with the container. A lock on the rootfs keeps two requests from starting a piece twice.
 Host trials (`--rootless`) map only container root, so they start no session.
@@ -99,8 +99,8 @@ Host trials (`--rootless`) map only container root, so they start no session.
 | session bus | `dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork` | `dbus-daemon` / `dbus-daemon` / `dbus` |
 | session bus, else | `/run/pc-x11/bin/dbus-daemon --config-file=/run/pc-x11/share/dbus-1/session.conf --address=unix:path=/run/user/1000/bus --nofork` | nothing: the X11 bundle |
 | sound | `pipewire`, which starts `wireplumber` and `pipewire-pulse` | `pipewire`, `wireplumber`, `pipewire-pulseaudio` / `pipewire`, `wireplumber`, `pipewire-pulse` / the same as Debian |
-| X11 | `xwayland-satellite :0` (when the distro has `Xwayland` too: GPU through glamor) | `xwayland-satellite`, `xorg-x11-server-Xwayland` / `xwayland` and a built satellite / `xwayland-satellite`, `xorg-xwayland` |
-| X11, else | `/run/pc-x11/bin/xwayland-satellite :0`, running the bundle's Xwayland (shared memory, no GPU) | nothing: the X11 bundle |
+| X11 | `/run/pc-x11/bin/xwayland-satellite :0`, running the bundle's Xwayland (glamor, DRI3, GLX: OpenGL apps on the GPU) | nothing: the X11 bundle |
+| X11, without the bundle | `xwayland-satellite :0` | `xwayland-satellite`, `xorg-x11-server-Xwayland` / `xwayland` and a built satellite / `xwayland-satellite`, `xorg-xwayland` |
 
 - **Sound.** Before it starts PipeWire the daemon writes `/etc/pipewire/pipewire.conf.d/pc-android.conf` (owned
   by container root, 0644): `libpipewire-module-pipe-tunnel` as a sink named `android` (S16LE, 48 kHz,
@@ -110,7 +110,7 @@ Host trials (`--rootless`) map only container root, so they start no session.
   arrives through `AudioTrack`; the daemon never makes it, and the module is `nofail`, so PipeWire runs without
   it. PulseAudio programs reach `pipewire-pulse` at `/run/user/1000/pulse/native` (`PULSE_SERVER`).
 - **The X11 bundle.** `/system_ext/pc-x11`, bind-mounted read-only at `/run/pc-x11` in every container: Xwayland
-  (built without glamor, so it needs no Mesa), xwayland-satellite, xkbcomp with the XKB data, and dbus-daemon,
+  (with glamor, DRI3 and GLX, and its own Mesa with every Gallium driver), xwayland-satellite, xkbcomp with the XKB data, and dbus-daemon,
   each with its libraries and its own `ld.so` (`packages/apps/PcWayland/x11`), so they run on any distro and libc.
   `/run/pc-x11/bin` ends the default `PATH`, which is how the bundle's satellite finds its Xwayland.
 - **Flatpak.** It installs nothing without a system bus, so every container gets one (the bundle's dbus-daemon

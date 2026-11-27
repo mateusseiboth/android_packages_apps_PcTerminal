@@ -208,7 +208,8 @@ struct piece {
 	int (*is_done)(const struct session_target *t); /* a one-time piece: nothing left to do */
 };
 
-/* The distro's programs first (its Xwayland keeps the GPU), then the bundle's. No dbus-broker: it needs
+/* The distro's programs first, then the bundle's; X11 the other way round: the bundle's Xwayland has glamor,
+ * DRI3 and GLX with its own Mesa, the same on every distro, and a distro's is only the fallback. No dbus-broker: it needs
  * systemd's user instance, which no container runs, and left alone it keeps a socket nobody answers. */
 static const struct piece PIECES[] = {
 	{ "system-bus", { "pc-system-bus" }, { { { "pc-system-bus" }, build_system_bus, 1 } }, NULL, 1, NULL },
@@ -220,7 +221,7 @@ static const struct piece PIECES[] = {
 	{ "sound", { "pipewire" }, { { { "pipewire" }, build_pipewire, 0 } }, write_audio_conf, 0, NULL },
 	{ "x11",
 	  { "xwayland-satellite" },
-	  { { { "xwayland-satellite", "Xwayland" }, build_satellite, 0 }, { { "xwayland-satellite", "Xwayland" }, build_satellite, 1 } },
+	  { { { "xwayland-satellite", "Xwayland" }, build_satellite, 1 }, { { "xwayland-satellite", "Xwayland" }, build_satellite, 0 } },
 	  NULL, 0, NULL },
 };
 
