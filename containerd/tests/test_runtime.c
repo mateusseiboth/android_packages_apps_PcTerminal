@@ -18,19 +18,20 @@ static void builds_the_environment_with_overrides(void)
 	struct env_input in = { "mateus", 1000, "/home/mateus", "/bin/bash", 1 };
 	const char *keys[] = { "LANG", "GDK_BACKEND" }, *values[] = { "pt_BR.UTF-8", "wayland" };
 	CHECK(!build_exec_env(&e, &in, keys, values, 2));
-	CHECK(e.count == 16);
+	CHECK(e.count == 17);
 	/* The X11 bundle last: a distro's own programs always come first. */
 	CHECK_STR(e.vars[0], "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/run/pc-x11/bin");
 	CHECK_STR(e.vars[1], "HOME=/home/mateus");
 	CHECK_STR(e.vars[5], "LANG=pt_BR.UTF-8");
 	CHECK_STR(e.vars[6], "XDG_RUNTIME_DIR=/run/user/1000");
-	CHECK_STR(e.vars[14], "TERM=xterm-256color");
-	CHECK_STR(e.vars[15], "GDK_BACKEND=wayland");
-	CHECK(e.vars[16] == NULL);
+	CHECK_STR(e.vars[14], "FLATPAK_USER_DIR=/var/lib/flatpak-user");
+	CHECK_STR(e.vars[15], "TERM=xterm-256color");
+	CHECK_STR(e.vars[16], "GDK_BACKEND=wayland");
+	CHECK(e.vars[17] == NULL);
 	const char *bad[] = { "A=B" }, *v[] = { "x" };
 	CHECK(build_exec_env(&e, &in, bad, v, 1)); /* '=' in a name */
 	in.use_pty = 0;
-	CHECK(!build_exec_env(&e, &in, NULL, NULL, 0) && e.count == 14);
+	CHECK(!build_exec_env(&e, &in, NULL, NULL, 0) && e.count == 15);
 }
 
 /* Qt and GTK pick Wayland, X11 programs find xwayland-satellite, and the session's bus and sound. */
@@ -52,7 +53,7 @@ static void points_programs_at_the_session(void)
 	CHECK_STR(e.vars[9], "QT_QPA_PLATFORM=xcb"); /* the request's values win */
 	CHECK_STR(e.vars[10], "DISPLAY=:1");
 	CHECK_STR(e.vars[11], "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus");
-	CHECK(e.count == 14);
+	CHECK(e.count == 15);
 }
 
 int main(void)

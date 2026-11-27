@@ -139,7 +139,7 @@ Default environment: `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sb
 `LOGNAME`, `SHELL`, `LANG=C.UTF-8`, `TERM=xterm-256color` (with `pty`), `XDG_RUNTIME_DIR=/run/user/<uid>`,
 `WAYLAND_DISPLAY=/run/pc-wayland/wayland-0`, `XDG_SESSION_TYPE=wayland`, `QT_QPA_PLATFORM=wayland;xcb`,
 `DISPLAY=:0`, `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`,
-`PULSE_SERVER=unix:/run/user/<uid>/pulse/native`, `container=pc-containerd`. `<uid>` is 1000 for the
+`PULSE_SERVER=unix:/run/user/<uid>/pulse/native`, `container=pc-containerd`, `FLATPAK_USER_DIR=/var/lib/flatpak-user`. `<uid>` is 1000 for the
 container's user and 0 for root.
 
 Reply: `{"id":7,"ok":true,"pid":42}` (`pid` inside the container's pid namespace), plus `"fd":true` and
@@ -157,7 +157,9 @@ Sets the terminal size (`TIOCSWINSZ`; the command gets SIGWINCH). Errors: `no_fd
 
 ### `apps`
 
-The container's applications, from `/usr/share/applications/*.desktop` (and `/usr/local/share/...`).
+The container's applications, from `/usr/share/applications/*.desktop` (and `/usr/local/share/...`), then
+Flatpak's from `/var/lib/flatpak/exports/share/applications` and `/var/lib/flatpak-user/exports/...` (an id
+already found hides the same id further on).
 The container does not have to be running.
 
 `{"id":9,"cmd":"apps","name":"debian","locale":"pt_BR"}` ->
@@ -178,7 +180,8 @@ The container does not have to be running.
   removed, `%%` turned into `%`. Run it with `exec`.
 - `icon_path`: a path inside the container: `Icon` when it is absolute, else the best file found in
   `/usr/share/icons/hicolor/<size>/apps/` (PNG of 96 px or more preferred, the largest PNG first),
-  `scalable/apps` (SVG), then smaller PNGs, then `/usr/share/pixmaps`. `icon_path` and `icon_format`
+  `scalable/apps` (SVG), then smaller PNGs, then `/usr/share/pixmaps`; each size also in Flatpak's
+  `exports/share/icons`. Links are followed inside the container's root. `icon_path` and `icon_format`
   (`"png"`, `"svg"` or `"xpm"`) are `null` when nothing was found.
 
 Errors: `not_found`.

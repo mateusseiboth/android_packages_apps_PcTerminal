@@ -115,6 +115,21 @@ static void prepare_display(const struct container_files *f)
 	}
 }
 
+/* The system bus's socket folder (session.c), and where Flatpak installs the user's apps
+ * (FLATPAK_USER_DIR, runtime.c): in the container, with the rest of its programs, rather than among the
+ * person's files in their home. */
+static void make_service_dirs(const struct container_files *f)
+{
+	char path[PATH_MAX];
+	build_path(f, "run/dbus", path, sizeof path);
+	make_dirs(path, 0755);
+	chmod(path, 0755);
+	build_path(f, "var/lib/flatpak-user", path, sizeof path);
+	make_dirs(path, 0755);
+	if (chown(path, CONTAINER_USER_ID, CONTAINER_USER_ID))
+		return; /* host trials map only uid 0 */
+}
+
 int write_container_files(const struct container_files *f)
 {
 	char text[512];
@@ -129,5 +144,6 @@ int write_container_files(const struct container_files *f)
 	make_runtime_dir(f, 0);
 	make_runtime_dir(f, CONTAINER_USER_ID);
 	prepare_display(f);
+	make_service_dirs(f);
 	return failed;
 }

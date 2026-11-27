@@ -222,22 +222,23 @@ static const char *find_format(const char *path)
 	return NULL;
 }
 
-/* Where an icon name is looked for, best first: big PNGs, SVG, small PNGs, then pixmaps. */
+/* Where an icon name is looked for, best first: big PNGs, SVG, small PNGs, then pixmaps; each in the
+ * distro's share and in what Flatpak exports from its apps. */
+static const char *const ICON_ROOTS[] = { "usr/share", "var/lib/flatpak/exports/share", "var/lib/flatpak-user/exports/share" };
 static const char *const ICON_PLACES[] = {
-	"usr/share/icons/hicolor/512x512/apps/%s.png", "usr/share/icons/hicolor/256x256/apps/%s.png",
-	"usr/share/icons/hicolor/192x192/apps/%s.png", "usr/share/icons/hicolor/128x128/apps/%s.png",
-	"usr/share/icons/hicolor/96x96/apps/%s.png",   "usr/share/icons/hicolor/scalable/apps/%s.svg",
-	"usr/share/icons/hicolor/72x72/apps/%s.png",   "usr/share/icons/hicolor/64x64/apps/%s.png",
-	"usr/share/icons/hicolor/48x48/apps/%s.png",   "usr/share/icons/hicolor/32x32/apps/%s.png",
-	"usr/share/icons/hicolor/24x24/apps/%s.png",   "usr/share/icons/hicolor/16x16/apps/%s.png",
-	"usr/share/pixmaps/%s.png",		       "usr/share/pixmaps/%s.svg",
-	"usr/share/pixmaps/%s.xpm",
+	"icons/hicolor/512x512/apps/%s.png", "icons/hicolor/256x256/apps/%s.png", "icons/hicolor/192x192/apps/%s.png",
+	"icons/hicolor/128x128/apps/%s.png", "icons/hicolor/96x96/apps/%s.png",   "icons/hicolor/scalable/apps/%s.svg",
+	"icons/hicolor/72x72/apps/%s.png",   "icons/hicolor/64x64/apps/%s.png",   "icons/hicolor/48x48/apps/%s.png",
+	"icons/hicolor/32x32/apps/%s.png",   "icons/hicolor/24x24/apps/%s.png",   "icons/hicolor/16x16/apps/%s.png",
+	"pixmaps/%s.png",		     "pixmaps/%s.svg",			  "pixmaps/%s.xpm",
 };
 
+/* Links are followed, inside the container's root (open_in_root): Flatpak exports its apps' icons and
+ * entries as links into each app's own files. */
 static int is_regular_in_root(int root_fd, const char *rel, long long *size)
 {
 	struct stat st;
-	int fd = open_in_root(root_fd, rel, O_RDONLY | O_NOFOLLOW | O_NONBLOCK, 0);
+	int fd = open_in_root(root_fd, rel, O_RDONLY | O_NONBLOCK, 0);
 	int ok = fd >= 0 && !fstat(fd, &st) && S_ISREG(st.st_mode);
 	*size = ok ? st.st_size : 0;
 	if (fd >= 0)
@@ -268,13 +269,16 @@ static void find_app_icon(int root_fd, struct desktop_app *app)
 		name[strlen(name) - 4] = 0;
 	if (!*name || strchr(name, '/'))
 		return;
-	for (size_t i = 0; i < sizeof ICON_PLACES / sizeof *ICON_PLACES; i++) {
-		snprintf(rel, sizeof rel, ICON_PLACES[i], name);
-		if (is_regular_in_root(root_fd, rel, &size)) {
-			set_icon(app, rel);
-			return;
+	for (size_t i = 0; i < sizeof ICON_PLACES / sizeof *ICON_PLACES; i++)
+		for (size_t r = 0; r < sizeof ICON_ROOTS / sizeof *ICON_ROOTS; r++) {
+			char place[128];
+			snprintf(place, sizeof place, "%s/%s", ICON_ROOTS[r], ICON_PLACES[i]);
+			snprintf(rel, sizeof rel, place, name);
+			if (is_regular_in_root(root_fd, rel, &size)) {
+				set_icon(app, rel);
+				return;
+			}
 		}
-	}
 }
 
 int open_icon(int root_fd, const char *path, const char **format, int *size)
@@ -284,7 +288,7 @@ int open_icon(int root_fd, const char *path, const char **format, int *size)
 	*format = find_format(path);
 	if (!*format || normalize_rel(path, rel, sizeof rel))
 		return -1;
-	int fd = open_in_root(root_fd, rel, O_RDONLY | O_NOFOLLOW | O_NONBLOCK, 0);
+	int fd = open_in_root(root_fd, rel, O_RDONLY | O_NONBLOCK, 0);
 	if (fd >= 0 && !fstat(fd, &st) && S_ISREG(st.st_mode) && st.st_size <= ICON_MAX_BYTES) {
 		*size = (int)st.st_size;
 		return fd;
@@ -296,8 +300,12 @@ int open_icon(int root_fd, const char *path, const char **format, int *size)
 
 /* ---- listing ---------------------------------------------------------------------------- */
 
-/* Local apps first: an id found there hides the same id in usr/share. */
-static const char *const APP_DIRS[] = { "usr/local/share/applications", "usr/share/applications" };
+/* Local apps first: an id found there hides the same id in usr/share, and the distro's own packages
+ * hide a Flatpak app of the same id (Flatpak exports its apps' entries in var/lib/flatpak/exports, and
+ * the user's in var/lib/flatpak-user/exports: FLATPAK_USER_DIR, runtime.c). */
+static const char *const APP_DIRS[] = { "usr/local/share/applications", "usr/share/applications",
+					"var/lib/flatpak/exports/share/applications",
+					"var/lib/flatpak-user/exports/share/applications" };
 
 static int read_in_root(int root_fd, const char *rel, char *out, size_t cap)
 {

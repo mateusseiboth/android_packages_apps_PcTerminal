@@ -90,6 +90,8 @@ int build_exec_env(struct exec_env *e, const struct env_input *in, const char *c
 		{ "DBUS_SESSION_BUS_ADDRESS", bus },
 		{ "PULSE_SERVER", pulse },
 		{ "container", "pc-containerd" },
+		/* flatpak --user installs in the container, where the menu finds its apps (container_files.c). */
+		{ "FLATPAK_USER_DIR", "/var/lib/flatpak-user" },
 	};
 	int failed = 0;
 	for (size_t i = 0; i < sizeof DEFAULTS / sizeof *DEFAULTS; i++)

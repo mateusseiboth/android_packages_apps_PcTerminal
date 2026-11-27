@@ -89,6 +89,34 @@ static void build_bundle_dbus_daemon(struct command *c, program_paths paths)
 	add_arg(c, "--nofork");
 }
 
+/* The bundle's system bus for every distro (no container runs systemd, which starts the distro's): Flatpak
+ * installs nothing without one. */
+static void build_system_bus(struct command *c, program_paths paths)
+{
+	add_arg(c, "%s", paths[0]);
+	add_arg(c, "--config-file=%s/share/dbus-1/system.conf", BUNDLE_ROOT);
+	add_arg(c, "--nopidfile");
+	add_arg(c, "--nofork");
+}
+
+/* Flatpak's system repository, empty: without it every flatpak command of the user fails, even with the
+ * user's own installation (FLATPAK_USER_DIR, runtime.c). Only root makes it; once, at the first start
+ * after Flatpak is installed. */
+static void build_flatpak_repo(struct command *c, program_paths paths)
+{
+	add_arg(c, "%s", paths[0]);
+	add_arg(c, "remotes");
+	add_arg(c, "--system");
+}
+
+static int has_flatpak_repo(const struct session_target *t)
+{
+	int fd = open_in_root(t->root_fd, "var/lib/flatpak/repo/config", O_PATH, 0);
+	if (fd >= 0)
+		close(fd);
+	return fd >= 0;
+}
+
 static void build_satellite(struct command *c, program_paths paths)
 {
 	add_arg(c, "%s", paths[0]);
@@ -176,20 +204,24 @@ struct piece {
 	const char *runs_as[RUNS_AS_MAX]; /* argv[0] base names that show the piece runs */
 	struct launcher launchers[2];     /* the first whose programs are all there */
 	int (*prepare)(const struct session_target *t);
+	int is_root;                      /* runs as the container's root, not its user */
+	int (*is_done)(const struct session_target *t); /* a one-time piece: nothing left to do */
 };
 
 /* The distro's programs first (its Xwayland keeps the GPU), then the bundle's. No dbus-broker: it needs
  * systemd's user instance, which no container runs, and left alone it keeps a socket nobody answers. */
 static const struct piece PIECES[] = {
+	{ "system-bus", { "pc-system-bus" }, { { { "pc-system-bus" }, build_system_bus, 1 } }, NULL, 1, NULL },
+	{ "flatpak-repo", { "flatpak" }, { { { "flatpak" }, build_flatpak_repo, 0 } }, NULL, 1, has_flatpak_repo },
 	{ "bus",
 	  { "dbus-daemon" },
 	  { { { "dbus-daemon" }, build_dbus_daemon, 0 }, { { "dbus-daemon" }, build_bundle_dbus_daemon, 1 } },
-	  NULL },
-	{ "sound", { "pipewire" }, { { { "pipewire" }, build_pipewire, 0 } }, write_audio_conf },
+	  NULL, 0, NULL },
+	{ "sound", { "pipewire" }, { { { "pipewire" }, build_pipewire, 0 } }, write_audio_conf, 0, NULL },
 	{ "x11",
 	  { "xwayland-satellite" },
 	  { { { "xwayland-satellite", "Xwayland" }, build_satellite, 0 }, { { "xwayland-satellite", "Xwayland" }, build_satellite, 1 } },
-	  NULL },
+	  NULL, 0, NULL },
 };
 
 static int has_line(const char *text, const char *line)
@@ -243,7 +275,8 @@ static int run_command(const struct session_target *t, const struct piece *p, st
 {
 	char error[256] = "";
 	int pty = -1, pid = 0;
-	struct exec_spec spec = { t->init_pid, t->cgroup_dir, c->argv, t->envp, t->home, CONTAINER_USER_ID, CONTAINER_USER_ID,
+	unsigned id = p->is_root ? 0 : CONTAINER_USER_ID;
+	struct exec_spec spec = { t->init_pid, t->cgroup_dir, c->argv, t->envp, p->is_root ? "/" : t->home, id, id,
 				  0, 0, 0, t->id_base, t->env->is_rootless };
 	if (t->ops->exec_in(t->env, &spec, &pty, &pid, error, sizeof error)) {
 		fprintf(stderr, "pc-containerd: session %s: %s\n", p->name, error);
@@ -277,7 +310,8 @@ int start_session(const struct session_target *t)
 	flock(t->root_fd, LOCK_EX);
 	if (list_group_programs(t->cgroup_dir, t->env->proc, programs, sizeof programs) >= 0)
 		for (size_t i = 0; i < sizeof PIECES / sizeof *PIECES; i++)
-			started += !is_running(&PIECES[i], programs) && start_piece(t, &PIECES[i]);
+			started += !(PIECES[i].is_done && PIECES[i].is_done(t)) && !is_running(&PIECES[i], programs) &&
+				   start_piece(t, &PIECES[i]);
 	flock(t->root_fd, LOCK_UN);
 	return started;
 }

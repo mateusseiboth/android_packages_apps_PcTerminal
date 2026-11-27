@@ -85,6 +85,8 @@ Host trials (`--rootless`) map only container root, so they start no session.
 
 | Piece | Started as | Needs (Fedora / Debian, Ubuntu / Arch) |
 | --- | --- | --- |
+| system bus (as root) | `/run/pc-x11/bin/pc-system-bus --config-file=/run/pc-x11/share/dbus-1/system.conf --nopidfile --nofork`, on `/run/dbus/system_bus_socket` | nothing: the X11 bundle |
+| Flatpak's system repository (as root, once) | `flatpak remotes --system` while `/var/lib/flatpak/repo` is missing | `flatpak` |
 | session bus | `dbus-daemon --session --address=unix:path=/run/user/1000/bus --nofork` | `dbus-daemon` / `dbus-daemon` / `dbus` |
 | session bus, else | `/run/pc-x11/bin/dbus-daemon --config-file=/run/pc-x11/share/dbus-1/session.conf --address=unix:path=/run/user/1000/bus --nofork` | nothing: the X11 bundle |
 | sound | `pipewire`, which starts `wireplumber` and `pipewire-pulse` | `pipewire`, `wireplumber`, `pipewire-pulseaudio` / `pipewire`, `wireplumber`, `pipewire-pulse` / the same as Debian |
@@ -102,6 +104,14 @@ Host trials (`--rootless`) map only container root, so they start no session.
   (built without glamor, so it needs no Mesa), xwayland-satellite, xkbcomp with the XKB data, and dbus-daemon,
   each with its libraries and its own `ld.so` (`packages/apps/PcWayland/x11`), so they run on any distro and libc.
   `/run/pc-x11/bin` ends the default `PATH`, which is how the bundle's satellite finds its Xwayland.
+- **Flatpak.** It installs nothing without a system bus, so every container gets one (the bundle's dbus-daemon
+  under the name `pc-system-bus`, so the daemon tells it from the session's; services own names as their
+  `system.d` files allow, and nothing is activated). A person's `flatpak install` goes to their own
+  installation, which `FLATPAK_USER_DIR` (default `exec` environment) puts at `/var/lib/flatpak-user`, in the
+  container, owned by its user, rather than among their files in their home: `flatpak remote-add --user` once,
+  then `flatpak install flathub <app>`. System installs need root: `sudo flatpak ...` (the user has sudo
+  without a password). The menu lists the apps of both installations (`var/lib/flatpak/exports` and
+  `var/lib/flatpak-user/exports`) with their icons, following Flatpak's links inside the rootfs.
 - **No dbus-broker.** It takes its socket from systemd's user instance, which no container runs; started without
   it, it dies and leaves a socket nobody answers ("Connection refused"), worse for programs than no bus. Fedora,
   whose default bus it is, gets the bundle's `dbus-daemon`.
