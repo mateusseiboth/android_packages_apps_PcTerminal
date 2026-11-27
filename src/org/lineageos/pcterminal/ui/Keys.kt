@@ -7,10 +7,12 @@ import org.lineageos.pcterminal.core.terminal.KeyModifiers
 import org.lineageos.pcterminal.core.terminal.TerminalKey
 
 /** Window actions on Ctrl+Shift and Ctrl+PageUp/PageDown, as other terminals have them. */
-enum class Shortcut { PASTE, NEW_TAB, CLOSE_TAB, NEXT_TAB, PREVIOUS_TAB, SCROLL_UP, SCROLL_DOWN }
+enum class Shortcut { COPY, PASTE, SELECT_ALL, NEW_TAB, CLOSE_TAB, NEXT_TAB, PREVIOUS_TAB, SCROLL_UP, SCROLL_DOWN }
 
 private val CTRL_SHIFT_SHORTCUTS = mapOf(
+    KeyEvent.KEYCODE_C to Shortcut.COPY,
     KeyEvent.KEYCODE_V to Shortcut.PASTE,
+    KeyEvent.KEYCODE_A to Shortcut.SELECT_ALL,
     KeyEvent.KEYCODE_T to Shortcut.NEW_TAB,
     KeyEvent.KEYCODE_W to Shortcut.CLOSE_TAB,
 )

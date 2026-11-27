@@ -23,7 +23,16 @@ the same protocol (`list`, `exec`, `apps`, `icon`).
 - **Manage containers**: open a terminal (as the person's account or as root), start, stop, rename (stopped
   only) and delete. While the page is open it shows each running container's memory, CPU, processes and disk.
 - Keys: Ctrl+Shift+T new tab, Ctrl+Shift+W close tab, Ctrl+Tab / Ctrl+PageDown and Ctrl+PageUp switch tabs,
-  Ctrl+Shift+V paste, Shift+PageUp/PageDown or the mouse wheel scroll back. Dead keys (ABNT2 accents) compose.
+  Ctrl+Shift+C copy, Ctrl+Shift+V paste, Ctrl+Shift+A select all, Shift+PageUp/PageDown or the mouse wheel
+  scroll back. Dead keys (ABNT2 accents) compose.
+- Mouse: drag to select (double click a word, triple click a line); the selection stays on its text while
+  output scrolls. The right button opens a menu with Copy, Paste and Select all; the middle button pastes the
+  last selection (the clipboard when nothing was selected yet), as X11's primary selection does. Selecting
+  does not replace the clipboard: copy with Ctrl+Shift+C or the menu. Pasted text goes to the program as typed,
+  newlines as Enter, wrapped in bracketed paste (`ESC[200~` ... `ESC[201~`) when the program turned it on.
+  When the program asks for the mouse (vim, htop, mc: DECSET 1000/1002/1003, SGR 1006), clicks, drags and the
+  wheel go to it; hold Shift to select, open the menu or scroll back instead. On the alternate screen (less,
+  man) the wheel sends arrow keys.
 
 Inside a container the person is `<user>` (uid 1000, from the Android user's name, `user` when it has none),
 with passwordless `sudo` when the distribution has sudo, and a root shell one click away otherwise. Their
@@ -164,6 +173,13 @@ launch decision and formats. `src/` wires Android: `LocalSocket` with fd passing
 the image into a pipe for the daemon), the pty reader thread, and Compose drawing (a `Canvas` with the platform's
 monospace font).
 
+Selection and the mouse: every line has a number that it keeps while output scrolls it into the scrollback
+(`Terminal.firstLineNumber`), so a selection (`TextSelection`, in `core/.../terminal/TextSelection.kt`) is two
+points in those numbers and is resolved into cells and text (`TextSelector`: words, wrapped lines, wide
+characters) when it is drawn or copied. `MouseEncoder` writes the X10 and SGR mouse reports. In `src/`,
+`ui/Mouse.kt` sends each gesture to the program or to the selection, `ui/TerminalMenu.kt` is the right button's
+menu and `TerminalClipboard` uses Android's `ClipboardManager`.
+
 The app runs as `android.uid.system` (platform signed, privileged) because pc-containerd only answers that uid.
 
 ## Protocol
@@ -244,7 +260,10 @@ or System V semaphores (X11's MIT-SHM, some databases) fail inside; `CONFIG_BINF
   images are skipped (the container gets its `/dev` from the host).
 - **The image** is checked against `SHA256SUMS` from the same server; its GPG signature is not checked.
 - **No input method**: the terminal takes hardware keys (with dead keys); the on-screen keyboard and IME
-  composition are not wired. No text selection or copy yet, no mouse reporting, no reflow on resize.
+  composition are not wired. No reflow on resize.
+- **Selection** follows the main screen's scrolling; on the alternate screen, or when a program scrolls only
+  part of the screen, it stays on the cells, not the text. Mouse reports use X10 or SGR (1006); UTF-8 (1005)
+  and urxvt (1015) coordinates are not sent, so X10 stops at column and row 223.
 - `/data/linux` is encrypted with the system's device key, not the user's credential key.
 - The daemon does not track the commands it started: no exit status, no list of sessions.
 

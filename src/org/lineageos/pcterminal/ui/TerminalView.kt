@@ -4,15 +4,14 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -25,25 +24,27 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
+import org.lineageos.pcterminal.TerminalClipboard
 import org.lineageos.pcterminal.TerminalTab
 import org.lineageos.pcterminal.core.terminal.CellStyle
+import org.lineageos.pcterminal.core.terminal.SelectedRange
 import org.lineageos.pcterminal.core.terminal.StyledRun
 import org.lineageos.pcterminal.core.terminal.TermColor
 import org.lineageos.pcterminal.core.terminal.TerminalSnapshot
 
 private val FONT_SIZE = 14.sp
-private const val SCROLL_LINES = 3
 private const val ITALIC_SKEW = -0.25f
 private const val DIM_ALPHA = 0x99
 private const val CURSOR_ALPHA = 0xB0
+private const val SELECTION_ALPHA = 0x66
 
 /** The size of one character cell and where its text sits. */
-private class CellMetrics(paint: Paint) {
+class CellMetrics(paint: Paint) {
     val width = paint.measureText("M")
     val height: Float
     val baseline: Float
@@ -55,9 +56,21 @@ private class CellMetrics(paint: Paint) {
     }
 }
 
-private data class Palette(val foreground: Int, val background: Int)
+private data class Palette(val foreground: Int, val background: Int, val selection: Int)
 
-/** One terminal drawn with the platform's monospace font; keys and the mouse wheel go to its session. */
+/** Shortcuts the view handles itself; the others go to the window. */
+private val VIEW_SHORTCUTS: Map<Shortcut, (TerminalViewState) -> Unit> = mapOf(
+    Shortcut.COPY to TerminalViewState::copy,
+    Shortcut.PASTE to TerminalViewState::paste,
+    Shortcut.SELECT_ALL to TerminalViewState::selectAll,
+    Shortcut.SCROLL_UP to { it.scrollBy(it.session.rows / 2) },
+    Shortcut.SCROLL_DOWN to { it.scrollBy(-it.session.rows / 2) },
+)
+
+/**
+ * One terminal drawn with the platform's monospace font, with the mouse selection on top. Keys go to its
+ * session, the mouse to [MouseHandler], the right button's menu is [TerminalMenu].
+ */
 @Composable
 fun TerminalView(tab: TerminalTab, onSize: (Int, Int) -> Unit, onShortcut: (Shortcut) -> Unit, modifier: Modifier = Modifier) {
     val version by tab.version.collectAsStateWithLifecycle()
@@ -69,26 +82,40 @@ fun TerminalView(tab: TerminalTab, onSize: (Int, Int) -> Unit, onShortcut: (Shor
         }
     }
     val metrics = remember(paint) { CellMetrics(paint) }
-    val palette = Palette(MaterialTheme.colorScheme.onSurface.toArgb(), MaterialTheme.colorScheme.surface.toArgb())
-    var scrollOffset by remember(tab) { mutableIntStateOf(0) }
+    val colors = MaterialTheme.colorScheme
+    val palette = Palette(colors.onSurface.toArgb(), colors.surface.toArgb(), (colors.primary.toArgb() and 0x00FFFFFF) or (SELECTION_ALPHA shl 24))
     val focus = remember { FocusRequester() }
-    val clipboard = LocalClipboard.current
-    val scope = rememberCoroutineScope()
-    val keys = remember(tab) {
-        KeyHandler { shortcut ->
-            when (shortcut) {
-                Shortcut.PASTE -> scope.launch {
-                    clipboard.getClipEntry()?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.let { tab.session.paste(it.toString()) }
-                }
-                Shortcut.SCROLL_UP -> scrollOffset += tab.session.snapshot().rows / 2
-                Shortcut.SCROLL_DOWN -> scrollOffset = (scrollOffset - tab.session.snapshot().rows / 2).coerceAtLeast(0)
-                else -> onShortcut(shortcut)
-            }
-        }
+    val context = LocalContext.current
+    val clipboard = remember(context) { TerminalClipboard(context) }
+    val state = remember(tab) { TerminalViewState(tab.session, clipboard) }
+    val doubleClickMs = LocalViewConfiguration.current.doubleTapTimeoutMillis
+    val mouse = remember(state, metrics, doubleClickMs) { MouseHandler(state, metrics, doubleClickMs) }
+    val currentOnShortcut by rememberUpdatedState(onShortcut)
+    val keys = remember(state) {
+        KeyHandler { shortcut -> VIEW_SHORTCUTS[shortcut]?.invoke(state) ?: currentOnShortcut(shortcut) }
     }
     LaunchedEffect(tab) { focus.requestFocus() }
+    Box(modifier.fillMaxSize()) {
+        TerminalCanvas(tab, state, version, paint, metrics, palette, focus, keys, mouse, onSize)
+        TerminalMenu(state, onClose = { focus.requestFocus() })
+    }
+}
+
+@Composable
+private fun TerminalCanvas(
+    tab: TerminalTab,
+    state: TerminalViewState,
+    version: Long,
+    paint: Paint,
+    metrics: CellMetrics,
+    palette: Palette,
+    focus: FocusRequester,
+    keys: KeyHandler,
+    mouse: MouseHandler,
+    onSize: (Int, Int) -> Unit,
+) {
     Canvas(
-        modifier
+        Modifier
             .fillMaxSize()
             .onSizeChanged { size ->
                 val rows = (size.height / metrics.height).toInt().coerceAtLeast(1)
@@ -101,33 +128,50 @@ fun TerminalView(tab: TerminalTab, onSize: (Int, Int) -> Unit, onShortcut: (Shor
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val used = keys.onKeyDown(event.nativeKeyEvent, tab.session)
-                if (used && !event.nativeKeyEvent.isShiftPressed) scrollOffset = 0
+                if (used && !event.nativeKeyEvent.isShiftPressed) state.scrollToBottom()
                 used
             }
-            .pointerInput(tab) {
+            .pointerInput(mouse) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
                         if (event.type == PointerEventType.Press) focus.requestFocus()
-                        if (event.type != PointerEventType.Scroll) continue
-                        val lines = (event.changes.first().scrollDelta.y * SCROLL_LINES).toInt()
-                        scrollOffset = (scrollOffset - lines).coerceAtLeast(0)
+                        mouse.onPointerEvent(event)
                     }
                 }
             },
     ) {
         version.let { } // redraw on every change of the terminal
-        val snapshot = tab.session.snapshot(scrollOffset)
-        drawIntoCanvas { drawSnapshot(it.nativeCanvas, snapshot, paint, metrics, palette) }
+        val snapshot = tab.session.snapshot(state.scrollOffset)
+        val selected = state.selection?.let(tab.session::resolveSelection)
+        drawIntoCanvas { drawSnapshot(it.nativeCanvas, snapshot, selected, paint, metrics, palette) }
     }
 }
 
-private fun drawSnapshot(canvas: android.graphics.Canvas, snapshot: TerminalSnapshot, paint: Paint, metrics: CellMetrics, palette: Palette) {
+private fun drawSnapshot(
+    canvas: android.graphics.Canvas,
+    snapshot: TerminalSnapshot,
+    selected: SelectedRange?,
+    paint: Paint,
+    metrics: CellMetrics,
+    palette: Palette,
+) {
     canvas.drawColor(palette.background)
     snapshot.lines.forEachIndexed { row, line ->
         line.runs.forEach { drawRun(canvas, it, row * metrics.height, paint, metrics, palette) }
     }
+    selected?.let { drawSelection(canvas, snapshot, it, paint, metrics, palette) }
     if (snapshot.isCursorVisible) drawCursor(canvas, snapshot, paint, metrics, palette)
+}
+
+/** A translucent band over the selected cells of each row. */
+private fun drawSelection(canvas: android.graphics.Canvas, snapshot: TerminalSnapshot, selected: SelectedRange, paint: Paint, metrics: CellMetrics, palette: Palette) {
+    paint.color = palette.selection
+    (0 until snapshot.rows).forEach { row ->
+        val columns = selected.findColumns(snapshot.topLineNumber + row, snapshot.cols) ?: return@forEach
+        val top = row * metrics.height
+        canvas.drawRect(columns.first * metrics.width, top, (columns.last + 1) * metrics.width, top + metrics.height, paint)
+    }
 }
 
 /** fg and bg of a style, with inverse, dim and invisible applied. */

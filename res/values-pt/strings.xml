@@ -17,6 +17,13 @@
     <string name="action_retry">Tentar de novo</string>
     <string name="action_ok">OK</string>
 
+    <string name="menu_copy">Copiar</string>
+    <string name="menu_paste">Colar</string>
+    <string name="menu_select_all">Selecionar tudo</string>
+    <string name="keys_copy">Ctrl+Shift+C</string>
+    <string name="keys_paste">Ctrl+Shift+V</string>
+    <string name="keys_select_all">Ctrl+Shift+A</string>
+
     <string name="tab_root">%1$s (root)</string>
     <string name="state_running">Em execução</string>
     <string name="state_stopped">Parado</string>
