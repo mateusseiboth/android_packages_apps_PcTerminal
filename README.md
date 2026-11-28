@@ -267,6 +267,11 @@ or System V semaphores (X11's MIT-SHM, some databases) fail inside; `CONFIG_BINF
 - `/data/linux` is encrypted with the system's device key, not the user's credential key.
 - The daemon does not track the commands it started: no exit status, no list of sessions.
 
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE). Copyright 2026 Mateus Seiboth. Third-party code keeps its own
+license (see Credits).
+
 ## Credits
 
 This app is part of LineageOS for PCs and builds on:
