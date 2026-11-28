@@ -4,6 +4,8 @@ Linux containers for LineageOS for PCs, in the spirit of distrobox: install a di
 [images.linuxcontainers.org](https://images.linuxcontainers.org), open a shell in it, run its programs on the
 Android desktop. Two parts live here:
 
+![Choosing a distribution to install.](docs/screenshots/01-terminal.png)
+
 - **`containerd/`**: `pc-containerd`, a root service in C. It extracts root file systems, runs each container
   in its own namespaces and cgroup, and opens commands in them, with a pseudo terminal when asked. Clients talk
   to it with the JSON lines of [`containerd/PROTOCOL.md`](containerd/PROTOCOL.md).
